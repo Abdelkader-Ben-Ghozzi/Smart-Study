@@ -1,7 +1,7 @@
-import 'package:app1/api_service.dart';
+import 'package:app1/services/api_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:app1/app_color.dart';
+import 'package:app1/theme/app_color.dart';
 import 'package:flutter/gestures.dart';
 import 'dart:async';
 

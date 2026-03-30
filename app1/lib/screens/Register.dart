@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:gap/gap.dart';
-import 'socialButtons.dart';
+import '../widgets/socialButtons.dart';
 import 'package:flutter/services.dart';
-import 'api_service.dart';
-import 'package:app1/app_color.dart';
+import '../services/api_service.dart';
+import 'package:app1/theme/app_color.dart';
 
 class SignUpScreen extends StatefulWidget {
   const SignUpScreen({super.key});

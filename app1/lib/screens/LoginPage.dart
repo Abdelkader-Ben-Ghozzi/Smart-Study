@@ -1,12 +1,12 @@
-import 'package:app1/Register.dart';
-import 'package:app1/forgot_password.dart';
-import 'package:app1/home_page.dart';
-import 'package:app1/socialButtons.dart';
+import 'package:app1/screens/Register.dart';
+import 'package:app1/screens/forgot_password.dart';
+import 'package:app1/screens/home_screen.dart';
+import 'package:app1/widgets/socialButtons.dart';
 import 'package:flutter/material.dart';
 import 'dart:async';
 import 'package:gap/gap.dart';
-import 'package:app1/api_service.dart';
-import 'package:app1/app_color.dart';
+import 'package:app1/services/api_service.dart';
+import 'package:app1/theme/app_color.dart';
 import 'dart:io';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
@@ -64,7 +64,7 @@ class _SplashScreenState extends State<SplashScreen>
         if (rememberMe == 'true' && token != null) {
           Navigator.pushReplacement(
             context,
-            MaterialPageRoute(builder: (_) => HomePage()),
+            MaterialPageRoute(builder: (_) => HomeScreen()),
           );
         } else {
           Navigator.pushReplacement(
@@ -611,7 +611,7 @@ class _MainScreenState extends State<MainScreen>
                                   Navigator.pushReplacement(
                                     context,
                                     MaterialPageRoute(
-                                      builder: (_) => HomePage(),
+                                      builder: (_) => HomeScreen(),
                                     ),
                                   );
                                 } else {
