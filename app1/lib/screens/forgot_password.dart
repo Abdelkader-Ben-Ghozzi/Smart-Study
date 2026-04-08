@@ -693,8 +693,12 @@ class _VerifyAccountPageState extends State<VerifyAccountPage>
       end: Offset.zero,
     ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeOutCubic));
     _controller.forward();
-    for (final f in _focusNodes) f.addListener(() => setState(() {}));
-    for (final c in _otpControllers) c.addListener(() => setState(() {}));
+    for (final f in _focusNodes) {
+      f.addListener(() => setState(() {}));
+    }
+    for (final c in _otpControllers) {
+      c.addListener(() => setState(() {}));
+    }
     _startTimer();
   }
 
@@ -735,7 +739,9 @@ class _VerifyAccountPageState extends State<VerifyAccountPage>
         _attemptCount = 0;
         _otpError = null;
         _isLocked = false;
-        for (final c in _otpControllers) c.clear();
+        for (final c in _otpControllers) {
+          c.clear();
+        }
       });
       _startTimer();
     } else {
@@ -790,8 +796,12 @@ class _VerifyAccountPageState extends State<VerifyAccountPage>
   void dispose() {
     _expiryTimer?.cancel();
     _controller.dispose();
-    for (final c in _otpControllers) c.dispose();
-    for (final f in _focusNodes) f.dispose();
+    for (final c in _otpControllers) {
+      c.dispose();
+    }
+    for (final f in _focusNodes) {
+      f.dispose();
+    }
     super.dispose();
   }
 
@@ -960,9 +970,9 @@ class _VerifyAccountPageState extends State<VerifyAccountPage>
                         controller: _otpControllers[i],
                         focusNode: _focusNodes[i],
                         onChanged: (v) {
-                          if (v.length == 1 && i < 4)
+                          if (v.length == 1 && i < 4) {
                             _focusNodes[i + 1].requestFocus();
-                          else if (v.isEmpty && i > 0)
+                          } else if (v.isEmpty && i > 0)
                             _focusNodes[i - 1].requestFocus();
                           setState(() {});
                         },
@@ -1431,8 +1441,9 @@ class _CreateNewPasswordPageState extends State<CreateNewPasswordPage>
                               });
                               _validateConfirm();
                               if (_confirmController.text !=
-                                  _passwordController.text)
+                                  _passwordController.text) {
                                 return;
+                              }
                               if (_passwordController.text.isEmpty) {
                                 setState(
                                   () => _formError = 'Please enter a password',

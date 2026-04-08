@@ -39,7 +39,7 @@ class _SignUpScreenState extends State<SignUpScreen>
   String? _confirmError;
   String? _formError;
   bool _isLoading = false;
-  bool _attemptedSubmit = false;
+  final bool _attemptedSubmit = false;
 
   // ── Password rule getters ─────────────────────────────────────────────────
   bool get _hasUppercase => passwordController.text.contains(RegExp(r'[A-Z]'));
@@ -126,16 +126,18 @@ class _SignUpScreenState extends State<SignUpScreen>
       emailController,
       passwordController,
       confirmController,
-    ])
+    ]) {
       c.dispose();
+    }
     for (final n in [
       _nameFocus,
       _phoneFocus,
       _emailFocus,
       _passwordFocus,
       _confirmFocus,
-    ])
+    ]) {
       n.dispose();
+    }
     super.dispose();
   }
 

@@ -29,18 +29,18 @@ class Course {
 
   factory Course.fromJson(Map<String, dynamic> json) {
     return Course(
-      id:          json['id'] as int,
-      title:       json['title'] as String,
+      id: json['id'] as int,
+      title: json['title'] as String,
       description: json['description'] as String?,
-      color:       json['color'] as String?,
-      icon:        json['icon'] as String?,
-      visibility:  json['visibility'] as String? ?? 'private',
-      isFavorite:  json['is_favorite'] == true,
-      isMine:      json['is_mine'] == true,
-      isSaved:     json['is_saved'] == true,
-      ownerName:   json['owner_name'] as String? ?? '',
-      createdAt:   DateTime.parse(json['created_at'] as String),
-      updatedAt:   DateTime.parse(json['updated_at'] as String),
+      color: json['color'] as String?,
+      icon: json['icon'] as String?,
+      visibility: json['visibility'] as String? ?? 'private',
+      isFavorite: json['is_favorite'] == true,
+      isMine: json['is_mine'] == true,
+      isSaved: json['is_saved'] == true,
+      ownerName: json['owner_name'] as String? ?? '',
+      createdAt: DateTime.parse(json['created_at'] as String),
+      updatedAt: DateTime.parse(json['updated_at'] as String),
     );
   }
 
@@ -56,22 +56,22 @@ class Course {
     String? icon,
   }) {
     return Course(
-      id:          id,
-      title:       title ?? this.title,
+      id: id,
+      title: title ?? this.title,
       description: description ?? this.description,
-      color:       color ?? this.color,
-      icon:        icon ?? this.icon,
-      visibility:  visibility ?? this.visibility,
-      isFavorite:  isFavorite ?? this.isFavorite,
-      isMine:      isMine,
-      isSaved:     isSaved ?? this.isSaved,
-      ownerName:   ownerName,
-      createdAt:   createdAt,
-      updatedAt:   updatedAt,
+      color: color ?? this.color,
+      icon: icon ?? this.icon,
+      visibility: visibility ?? this.visibility,
+      isFavorite: isFavorite ?? this.isFavorite,
+      isMine: isMine,
+      isSaved: isSaved ?? this.isSaved,
+      ownerName: ownerName,
+      createdAt: createdAt,
+      updatedAt: updatedAt,
     );
   }
 }
 
-enum CourseTab { all, mine, public, saved }
+enum CourseTab { all, mine, saved }
 
 enum CourseSort { recent, favorite, alpha }

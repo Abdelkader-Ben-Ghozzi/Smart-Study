@@ -1,25 +1,36 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flutter_riverpod/legacy.dart';
 import '../services/home_api_service.dart';
 import '../models/subject.dart';
 import '../models/deck.dart';
 import '../models/user_model.dart';
 
-// ── Service provider ─────────────────────────────────────────────────────────
+// ── Service provider ──────────────────────────────────────────────────────────
 final homeApiServiceProvider = Provider<HomeApiService>(
   (_) => HomeApiService(),
 );
 
-// ── Theme mode provider ───────────────────────────────────────────────────────
-// Uses Flutter's ThemeMode enum — pass directly to MaterialApp.themeMode.
-// Toggle with: ref.read(themeModeProvider.notifier).state = ThemeMode.light
+// ── Theme mode ────────────────────────────────────────────────────────────────
 final themeModeProvider = StateProvider<ThemeMode>((_) => ThemeMode.dark);
 
-// ── User provider ─────────────────────────────────────────────────────────────
-final userProvider = FutureProvider<UserModel>((ref) async {
-  return ref.read(homeApiServiceProvider).fetchUser();
-});
+// ── User provider — AsyncNotifier so invalidate() triggers a real re-fetch ────
+class UserNotifier extends AsyncNotifier<UserModel> {
+  @override
+  Future<UserModel> build() async {
+    return ref.read(homeApiServiceProvider).fetchUser();
+  }
+
+  Future<void> refresh() async {
+    state = const AsyncLoading();
+    state = await AsyncValue.guard(
+      () => ref.read(homeApiServiceProvider).fetchUser(),
+    );
+  }
+}
+
+final userProvider = AsyncNotifierProvider<UserNotifier, UserModel>(
+  UserNotifier.new,
+);
 
 // ── Subjects notifier ─────────────────────────────────────────────────────────
 class SubjectsNotifier extends AsyncNotifier<List<Subject>> {
@@ -48,16 +59,14 @@ class SubjectsNotifier extends AsyncNotifier<List<Subject>> {
     state = AsyncData((state.value ?? []).where((s) => s.id != id).toList());
   }
 
-  void refresh() {
-    ref.invalidateSelf();
-  }
+  void refresh() => ref.invalidateSelf();
 }
 
 final subjectsProvider = AsyncNotifierProvider<SubjectsNotifier, List<Subject>>(
   SubjectsNotifier.new,
 );
 
-// ── Decks provider ────────────────────────────────────────────────────────────
+// ── Decks provider ─────────────────────────────────────────────────────────────
 final recentDecksProvider = FutureProvider<List<Deck>>((ref) async {
   return ref.read(homeApiServiceProvider).fetchRecentDecks();
 });

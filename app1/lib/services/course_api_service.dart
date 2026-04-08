@@ -9,7 +9,7 @@ class CourseApiService {
   final FlutterSecureStorage _storage;
 
   CourseApiService({
-    String baseUrl = 'http://127.0.0.1:8000/api',
+    String baseUrl = 'https://kasandra-unmeddled-heriberto.ngrok-free.dev/api',
     FlutterSecureStorage storage = const FlutterSecureStorage(),
   }) : _base = baseUrl,
        _storage = storage;
@@ -37,7 +37,7 @@ class CourseApiService {
       final token = await _token();
       if (token == null) return [];
 
-      final tabStr = tab.name; // 'all' | 'mine' | 'public' | 'saved'
+      final tabStr = tab.name;
       final sortStr = switch (sort) {
         CourseSort.recent => 'recent',
         CourseSort.favorite => 'fav',
@@ -53,15 +53,25 @@ class CourseApiService {
       );
 
       final res = await http.get(uri, headers: _auth(token));
-      final body = jsonDecode(res.body) as Map<String, dynamic>;
+
       if (res.statusCode == 200) {
+        final body = jsonDecode(res.body) as Map<String, dynamic>;
         final list = body['data'] as List? ?? [];
-        return list
+
+        List<Course> courses = list
             .map((e) => Course.fromJson(e as Map<String, dynamic>))
             .toList();
+
+        if (sort == CourseSort.alpha) {
+          courses.sort((a, b) {
+            return a.title.toLowerCase().compareTo(b.title.toLowerCase());
+          });
+        }
+
+        return courses;
       }
       return [];
-    } catch (_) {
+    } catch (e) {
       return [];
     }
   }
@@ -76,17 +86,18 @@ class CourseApiService {
   }) async {
     try {
       final token = await _token();
-      if (token == null)
+      if (token == null) {
         return {'success': false, 'message': 'Not authenticated'};
+      }
 
       final res = await http.post(
         Uri.parse('$_base/courses'),
         headers: _json(token),
         body: jsonEncode({
           'title': title,
-          if (description != null) 'description': description,
-          if (color != null) 'color': color,
-          if (icon != null) 'icon': icon,
+          'description': ?description,
+          'color': ?color,
+          'icon': ?icon,
           'visibility': visibility,
         }),
       );
@@ -112,18 +123,19 @@ class CourseApiService {
   }) async {
     try {
       final token = await _token();
-      if (token == null)
+      if (token == null) {
         return {'success': false, 'message': 'Not authenticated'};
+      }
 
       final res = await http.put(
         Uri.parse('$_base/courses/$id'),
         headers: _json(token),
         body: jsonEncode({
-          if (title != null) 'title': title,
-          if (description != null) 'description': description,
-          if (color != null) 'color': color,
-          if (icon != null) 'icon': icon,
-          if (visibility != null) 'visibility': visibility,
+          'title': ?title,
+          'description': ?description,
+          'color': ?color,
+          'icon': ?icon,
+          'visibility': ?visibility,
         }),
       );
       final body = jsonDecode(res.body) as Map<String, dynamic>;
@@ -141,15 +153,17 @@ class CourseApiService {
   Future<Map<String, dynamic>> deleteCourse(int id) async {
     try {
       final token = await _token();
-      if (token == null)
+      if (token == null) {
         return {'success': false, 'message': 'Not authenticated'};
+      }
 
       final res = await http.delete(
         Uri.parse('$_base/courses/$id'),
         headers: _auth(token),
       );
-      if (res.statusCode == 200 || res.statusCode == 204)
+      if (res.statusCode == 200 || res.statusCode == 204) {
         return {'success': true};
+      }
       final body = res.body.isNotEmpty
           ? jsonDecode(res.body) as Map<String, dynamic>
           : <String, dynamic>{};

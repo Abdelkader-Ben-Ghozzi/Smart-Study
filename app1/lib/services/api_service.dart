@@ -5,8 +5,28 @@ import 'package:http/http.dart' as http;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 class ApiService {
-  final String baseUrl = 'http://127.0.0.1:8000/api';
+  final String baseUrl =
+      'https://kasandra-unmeddled-heriberto.ngrok-free.dev/api';
   final storage = const FlutterSecureStorage();
+
+  // ── Headers ───────────────────────────────────────────────────────────────
+
+  // Added ngrok-skip-browser-warning to prevent the 404/502 landing page issues
+  Map<String, String> get _baseHeaders => {
+    'Accept': 'application/json',
+    'Content-Type': 'application/json',
+    'ngrok-skip-browser-warning': 'true',
+  };
+
+  Map<String, String> _authHeaders(String token) => {
+    ..._baseHeaders,
+    'Authorization': 'Bearer $token',
+  };
+
+  Map<String, String> _jsonHeaders(String token) => {
+    ..._baseHeaders,
+    'Authorization': 'Bearer $token',
+  };
 
   // ── Helpers ───────────────────────────────────────────────────────────────
 
@@ -16,17 +36,6 @@ class ApiService {
     final token = await storage.read(key: 'token');
     return token != null && token.isNotEmpty;
   }
-
-  Map<String, String> _authHeaders(String token) => {
-    'Authorization': 'Bearer $token',
-    'Accept': 'application/json',
-  };
-
-  Map<String, String> _jsonHeaders(String token) => {
-    'Authorization': 'Bearer $token',
-    'Content-Type': 'application/json',
-    'Accept': 'application/json',
-  };
 
   // ── Auth ──────────────────────────────────────────────────────────────────
 
@@ -50,10 +59,7 @@ class ApiService {
     try {
       final res = await http.post(
         Uri.parse('$baseUrl/register'),
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-        },
+        headers: _baseHeaders,
         body: jsonEncode({
           'name': name,
           'phone': phone,
@@ -71,18 +77,16 @@ class ApiService {
       }
       if (data['errors'] != null) {
         final errors = data['errors'] as Map<String, dynamic>;
-        if (errors.containsKey('email')) {
+        if (errors.containsKey('email'))
           return {
             'success': false,
             'message': 'This email is already registered',
           };
-        }
-        if (errors.containsKey('phone')) {
+        if (errors.containsKey('phone'))
           return {
             'success': false,
             'message': 'This phone number is already registered',
           };
-        }
         return {
           'success': false,
           'message': (errors.values.first as List).first.toString(),
@@ -104,10 +108,7 @@ class ApiService {
     try {
       final res = await http.post(
         Uri.parse('$baseUrl/login'),
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-        },
+        headers: _baseHeaders,
         body: jsonEncode({'email': email, 'password': password}),
       );
       final data = jsonDecode(res.body) as Map<String, dynamic>;
@@ -117,18 +118,9 @@ class ApiService {
         }
         return {'success': true, ...data};
       }
-      if (data['errors'] != null) {
-        final errors = data['errors'] as Map<String, dynamic>;
-        return {
-          'success': false,
-          'message': (errors.values.first as List).first.toString(),
-        };
-      }
       return {'success': false, 'message': data['message'] ?? 'Login failed'};
     } on SocketException {
       return {'success': false, 'message': 'No internet connection'};
-    } on TimeoutException {
-      return {'success': false, 'message': 'Request timed out'};
     } catch (e) {
       return {'success': false, 'message': 'Something went wrong'};
     }
@@ -143,8 +135,6 @@ class ApiService {
           headers: _authHeaders(token),
         );
       }
-    } catch (_) {
-      // Always clear local storage even if server call fails
     } finally {
       await storage.deleteAll();
     }
@@ -157,10 +147,7 @@ class ApiService {
     try {
       final res = await http.post(
         Uri.parse('$baseUrl/forgot-password/check-email'),
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-        },
+        headers: _baseHeaders,
         body: jsonEncode({'email': email}),
       );
       final data = jsonDecode(res.body) as Map<String, dynamic>;
@@ -169,8 +156,6 @@ class ApiService {
         'success': false,
         'message': data['message'] ?? 'Email not found',
       };
-    } on SocketException {
-      return {'success': false, 'message': 'No internet connection'};
     } catch (_) {
       return {'success': false, 'message': 'Network error'};
     }
@@ -180,10 +165,7 @@ class ApiService {
     try {
       final res = await http.post(
         Uri.parse('$baseUrl/forgot-password/send-otp'),
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-        },
+        headers: _baseHeaders,
         body: jsonEncode({'email': email, 'method': method}),
       );
       final data = jsonDecode(res.body) as Map<String, dynamic>;
@@ -201,21 +183,12 @@ class ApiService {
     try {
       final res = await http.post(
         Uri.parse('$baseUrl/forgot-password/verify-otp'),
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-        },
+        headers: _baseHeaders,
         body: jsonEncode({'email': email, 'otp': otp}),
       );
       final data = jsonDecode(res.body) as Map<String, dynamic>;
       if (res.statusCode == 200) return {'success': true, ...data};
-      return {
-        'success': false,
-        'message': data['message'] ?? 'Invalid OTP',
-        'expired': data['expired'] ?? false,
-        'locked': data['locked'] ?? false,
-        'remaining': data['remaining'] ?? 0,
-      };
+      return {'success': false, ...data};
     } catch (_) {
       return {'success': false, 'message': 'Network error'};
     }
@@ -229,10 +202,7 @@ class ApiService {
     try {
       final res = await http.post(
         Uri.parse('$baseUrl/forgot-password/reset'),
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-        },
+        headers: _baseHeaders,
         body: jsonEncode({
           'email': email,
           'reset_token': resetToken,
@@ -289,29 +259,22 @@ class ApiService {
     }
   }
 
-  /// POST /api/user/avatar — multipart image upload
   Future<Map<String, dynamic>> uploadAvatar({required String filePath}) async {
     try {
       final token = await storage.read(key: 'token');
       if (token == null)
         return {'success': false, 'message': 'Not authenticated'};
-
       final request = http.MultipartRequest(
         'POST',
         Uri.parse('$baseUrl/user/avatar'),
       );
-      request.headers['Authorization'] = 'Bearer $token';
-      request.headers['Accept'] = 'application/json';
+      request.headers.addAll(_authHeaders(token)); // Includes ngrok bypass
       request.files.add(await http.MultipartFile.fromPath('avatar', filePath));
-
       final streamed = await request.send();
       final res = await http.Response.fromStream(streamed);
       final data = jsonDecode(res.body) as Map<String, dynamic>;
-
       if (res.statusCode == 200) return {'success': true, ...data};
       return {'success': false, 'message': data['message'] ?? 'Upload failed'};
-    } on SocketException {
-      return {'success': false, 'message': 'No internet connection'};
     } catch (_) {
       return {'success': false, 'message': 'Network error'};
     }
@@ -370,22 +333,18 @@ class ApiService {
       final token = await storage.read(key: 'token');
       if (token == null)
         return {'success': false, 'message': 'Not authenticated'};
-
       final request = http.MultipartRequest(
         'POST',
         Uri.parse('$baseUrl/documents'),
       );
-      request.headers['Authorization'] = 'Bearer $token';
-      request.headers['Accept'] = 'application/json';
+      request.headers.addAll(_authHeaders(token));
       request.fields['name'] = name;
       if (subjectId != null)
         request.fields['subject_id'] = subjectId.toString();
       request.files.add(await http.MultipartFile.fromPath('pdf', filePath));
-
       final streamed = await request.send();
       final res = await http.Response.fromStream(streamed);
       final data = jsonDecode(res.body) as Map<String, dynamic>;
-
       if (res.statusCode == 201) return {'success': true, ...data};
       return {'success': false, 'message': data['message'] ?? 'Upload failed'};
     } catch (_) {
@@ -406,10 +365,8 @@ class ApiService {
         return {'success': true};
       final data = res.body.isNotEmpty
           ? jsonDecode(res.body) as Map<String, dynamic>
-          : <String, dynamic>{};
+          : {};
       return {'success': false, 'message': data['message'] ?? 'Delete failed'};
-    } on SocketException {
-      return {'success': false, 'message': 'No internet connection'};
     } catch (_) {
       return {'success': false, 'message': 'Network error'};
     }
@@ -489,13 +446,11 @@ class ApiService {
         return {'success': true};
       final data = res.body.isNotEmpty
           ? jsonDecode(res.body) as Map<String, dynamic>
-          : <String, dynamic>{};
+          : {};
       return {
         'success': false,
         'message': data['message'] ?? 'Failed to delete',
       };
-    } on SocketException {
-      return {'success': false, 'message': 'No internet connection'};
     } catch (_) {
       return {'success': false, 'message': 'Network error'};
     }

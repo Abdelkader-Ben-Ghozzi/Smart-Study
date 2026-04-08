@@ -14,7 +14,8 @@ import '../providers/home_providers.dart';
 // ─────────────────────────────────────────────────────────────────────────────
 // Base URL constant — change once, applies everywhere
 // ─────────────────────────────────────────────────────────────────────────────
-const String _kBaseStorageUrl = 'http://127.0.0.1:8000/storage/';
+const String _kBaseStorageUrl =
+    'https://kasandra-unmeddled-heriberto.ngrok-free.dev/storage/';
 
 class ProfileScreen extends ConsumerStatefulWidget {
   const ProfileScreen({super.key});
@@ -127,14 +128,14 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
         _name = res['name'] ?? '';
         _email = res['email'] ?? '';
         _phone = res['phone'] ?? '';
-        _avatarPath = res['avatar'] as String?; // just the path, not full URL
+        _avatarPath = res['avatar'] as String?;
         _nameCtrl.text = _name;
         _emailCtrl.text = _email;
         _phoneCtrl.text = _phone;
         _isLoading = false;
       });
       // Refresh the home screen greeting
-      ref.invalidate(userProvider);
+      ref.read(userProvider.notifier).refresh();
     } else {
       setState(() => _isLoading = false);
     }
@@ -283,7 +284,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
         _pendingAvatarFile = null;
         _uploadingAvatar = false;
       });
-      ref.invalidate(userProvider);
+      ref.read(userProvider.notifier).refresh();
       _showSnack('Profile photo updated', success: true);
     } else {
       setState(() {
@@ -317,7 +318,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
         _name = _nameCtrl.text.trim();
         _email = _emailCtrl.text.trim();
         _profileSuccess = 'Profile updated successfully';
-        ref.invalidate(userProvider);
+        ref.read(userProvider.notifier).refresh();
       } else {
         _profileError = res['message'] ?? 'Update failed';
       }

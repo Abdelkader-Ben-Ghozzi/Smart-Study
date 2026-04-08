@@ -1,17 +1,18 @@
-import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:gap/gap.dart';
-
+import 'course_details.dart';
 import '../models/course.dart';
+import '../models/user_model.dart';
 import '../providers/courses_provider.dart';
 import '../providers/home_providers.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_theme.dart';
 import '../widgets/shimmer_box.dart';
 import 'profile_screen.dart';
+import 'stats_screen.dart';
 
-// ── Accent palette assigned round-robin per course ────────────────────────────
+// ── Accent palette ────────────────────────────────────────────────────────────
 const _kAccents = [
   Color(0xFF3055E7),
   Color(0xFF7C3AED),
@@ -23,9 +24,7 @@ const _kAccents = [
 ];
 Color _accentFor(int id) => _kAccents[id % _kAccents.length];
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Root widget — wraps MaterialApp with theme + AppColors
-// ─────────────────────────────────────────────────────────────────────────────
+// ── Root ──────────────────────────────────────────────────────────────────────
 class HomeScreen extends ConsumerWidget {
   const HomeScreen({super.key});
 
@@ -48,12 +47,9 @@ class HomeScreen extends ConsumerWidget {
   }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Scaffold — handles bottom nav
-// ─────────────────────────────────────────────────────────────────────────────
+// ── Scaffold ──────────────────────────────────────────────────────────────────
 class _HomeScaffold extends ConsumerStatefulWidget {
   const _HomeScaffold();
-
   @override
   ConsumerState<_HomeScaffold> createState() => _HomeScaffoldState();
 }
@@ -61,23 +57,22 @@ class _HomeScaffold extends ConsumerStatefulWidget {
 class _HomeScaffoldState extends ConsumerState<_HomeScaffold> {
   int _navIndex = 0;
 
-  Widget _buildBody() {
-    switch (_navIndex) {
-      case 0:
-        return const _CoursesPage();
-      case 4:
-        return const ProfileScreen();
-      default:
-        return _PlaceholderTab(index: _navIndex);
-    }
-  }
+  // ── Use IndexedStack so pages keep their state ────────────────────────────
+  final _pages = const [
+    _CoursesPage(),
+    _PlaceholderTab(index: 1),
+    _PlaceholderTab(index: 2),
+    StatsScreen(),
+    ProfileScreen(),
+  ];
 
   @override
   Widget build(BuildContext context) {
     final c = AppColors.of(context);
     return Scaffold(
       backgroundColor: c.bg,
-      body: _buildBody(),
+      // IndexedStack keeps all pages in memory — no rebuild on tab switch
+      body: IndexedStack(index: _navIndex, children: _pages),
       bottomNavigationBar: _BottomNav(
         current: _navIndex,
         onTap: (i) => setState(() => _navIndex = i),
@@ -86,12 +81,9 @@ class _HomeScaffoldState extends ConsumerState<_HomeScaffold> {
   }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Courses Page — the full redesigned home body
-// ─────────────────────────────────────────────────────────────────────────────
+// ── Courses page ──────────────────────────────────────────────────────────────
 class _CoursesPage extends ConsumerStatefulWidget {
   const _CoursesPage();
-
   @override
   ConsumerState<_CoursesPage> createState() => _CoursesPageState();
 }
@@ -105,7 +97,6 @@ class _CoursesPageState extends ConsumerState<_CoursesPage>
   final _tabs = const [
     (CourseTab.all, 'All'),
     (CourseTab.mine, 'My Courses'),
-    (CourseTab.public, 'Public'),
     (CourseTab.saved, 'Saved'),
   ];
 
@@ -144,6 +135,7 @@ class _CoursesPageState extends ConsumerState<_CoursesPage>
             visibility: result['visibility'] ?? 'private',
           );
       if (res['success'] != true && mounted) {
+        final c = AppColors.of(context);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(res['message'] ?? 'Failed to create course'),
@@ -170,10 +162,10 @@ class _CoursesPageState extends ConsumerState<_CoursesPage>
       body: SafeArea(
         child: Column(
           children: [
-            // ── App header ──
+            // ── Header ──
             _AppHeader(userAsync: userAsync),
 
-            // ── Top controls: sort + create + search ──
+            // ── Controls ──
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
               child: AnimatedSwitcher(
@@ -205,7 +197,7 @@ class _CoursesPageState extends ConsumerState<_CoursesPage>
 
             const Gap(12),
 
-            // ── Tab bar ──
+            // ── Tabs ──
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16),
               child: Container(
@@ -236,7 +228,7 @@ class _CoursesPageState extends ConsumerState<_CoursesPage>
 
             const Gap(12),
 
-            // ── Course list ──
+            // ── List ──
             Expanded(
               child: TabBarView(
                 controller: _tabCtrl,
@@ -250,7 +242,7 @@ class _CoursesPageState extends ConsumerState<_CoursesPage>
   }
 }
 
-// ── App header (logo + greeting + theme toggle + avatar) ──────────────────────
+// ── App Header ────────────────────────────────────────────────────────────────
 class _AppHeader extends ConsumerWidget {
   final AsyncValue userAsync;
   const _AppHeader({required this.userAsync});
@@ -267,11 +259,11 @@ class _AppHeader extends ConsumerWidget {
           // Logo
           Image.asset(
             'images/logo.png',
-            width: 28,
-            height: 28,
+            width: 100,
+            height: 50,
             errorBuilder: (_, __, ___) => Container(
-              width: 28,
-              height: 28,
+              width: 32,
+              height: 32,
               decoration: BoxDecoration(
                 color: c.primary,
                 borderRadius: BorderRadius.circular(8),
@@ -279,17 +271,17 @@ class _AppHeader extends ConsumerWidget {
               child: const Icon(
                 Icons.auto_stories_rounded,
                 color: Colors.white,
-                size: 16,
+                size: 18,
               ),
             ),
           ),
           const SizedBox(width: 8),
           Text(
-            'SmartStudy AI',
+            'SmartStudy',
             style: TextStyle(
-              color: c.text,
+              color: c.primary,
               fontWeight: FontWeight.w800,
-              fontSize: 18,
+              fontSize: 25,
               letterSpacing: -0.3,
             ),
           ),
@@ -304,7 +296,7 @@ class _AppHeader extends ConsumerWidget {
             child: Container(
               width: 36,
               height: 36,
-              margin: const EdgeInsets.only(right: 8),
+              margin: const EdgeInsets.only(right: 10),
               decoration: BoxDecoration(
                 color: c.fieldBg,
                 borderRadius: BorderRadius.circular(10),
@@ -318,40 +310,11 @@ class _AppHeader extends ConsumerWidget {
             ),
           ),
 
-          // Avatar
-          Container(
-            width: 36,
-            height: 36,
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                colors: [c.primary, c.primaryLight],
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-              ),
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: userAsync.when(
-              data: (u) => Center(
-                child: Text(
-                  u.firstName[0].toUpperCase(),
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w700,
-                    fontSize: 15,
-                  ),
-                ),
-              ),
-              loading: () => const Icon(
-                Icons.person_outline,
-                color: Colors.white,
-                size: 18,
-              ),
-              error: (_, __) => const Icon(
-                Icons.person_outline,
-                color: Colors.white,
-                size: 18,
-              ),
-            ),
+          // ── Avatar — shows real photo if set, initials otherwise ──────────────
+          userAsync.when(
+            data: (u) => _HomeAvatar(user: u, colors: c),
+            loading: () => _HomeAvatarShimmer(colors: c),
+            error: (_, __) => _HomeAvatarShimmer(colors: c),
           ),
         ],
       ),
@@ -359,7 +322,111 @@ class _AppHeader extends ConsumerWidget {
   }
 }
 
-// ── Control bar: sort dropdown + create + search icon ─────────────────────────
+// ── Home avatar widget — photo > initials ─────────────────────────────────────
+class _HomeAvatar extends StatelessWidget {
+  final UserModel user;
+  final AppColorScheme colors;
+  static const double _size = 44;
+
+  const _HomeAvatar({required this.user, required this.colors});
+
+  @override
+  Widget build(BuildContext context) {
+    final c = colors;
+    final url = user.avatarUrl(); // null when no photo uploaded
+
+    return Container(
+      width: _size,
+      height: _size,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        // Gradient shows through only when no photo (initials fallback)
+        gradient: url == null
+            ? LinearGradient(
+                colors: [c.primary, c.primaryLight],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              )
+            : null,
+        boxShadow: [
+          BoxShadow(
+            color: c.primary.withOpacity(0.25),
+            blurRadius: 8,
+            offset: const Offset(0, 3),
+          ),
+        ],
+      ),
+      child: ClipOval(
+        child: url != null
+            ? Image.network(
+                url,
+                width: _size,
+                height: _size,
+                fit: BoxFit.cover,
+                // Falls back to gradient + initials if image fails / offline
+                errorBuilder: (_, __, ___) => _Initials(user: user, colors: c),
+                loadingBuilder: (_, child, progress) =>
+                    progress == null ? child : _HomeAvatarShimmer(colors: c),
+              )
+            : _Initials(user: user, colors: c),
+      ),
+    );
+  }
+}
+
+// ── Initials fallback ─────────────────────────────────────────────────────────
+class _Initials extends StatelessWidget {
+  final UserModel user;
+  final AppColorScheme colors;
+  const _Initials({required this.user, required this.colors});
+
+  @override
+  Widget build(BuildContext context) {
+    final c = colors;
+    return Container(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [c.primary, c.primaryLight],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+      ),
+      child: Center(
+        child: Text(
+          user.firstName.isNotEmpty ? user.firstName[0].toUpperCase() : '?',
+          style: const TextStyle(
+            color: Colors.white,
+            fontWeight: FontWeight.w700,
+            fontSize: 18,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ── Shimmer placeholder while user loads ──────────────────────────────────────
+class _HomeAvatarShimmer extends StatelessWidget {
+  final AppColorScheme colors;
+  const _HomeAvatarShimmer({required this.colors});
+
+  @override
+  Widget build(BuildContext context) {
+    final c = colors;
+    return Container(
+      width: 44,
+      height: 44,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        color: c.shimmerBase,
+        border: Border.all(color: c.borderDefault),
+      ),
+      child: Icon(Icons.person_outline, color: c.iconDefault, size: 22),
+    );
+  }
+}
+
+// ── Control bar ───────────────────────────────────────────────────────────────
 class _ControlBar extends StatelessWidget {
   final CourseSort sort;
   final AppColorScheme colors;
@@ -387,7 +454,6 @@ class _ControlBar extends StatelessWidget {
     final c = colors;
     return Row(
       children: [
-        // Sort dropdown
         Expanded(
           child: GestureDetector(
             onTap: () => _showSortSheet(context),
@@ -422,14 +488,9 @@ class _ControlBar extends StatelessWidget {
             ),
           ),
         ),
-
         const SizedBox(width: 8),
-
-        // Search icon
         _IconBtn(icon: Icons.search_rounded, colors: c, onTap: onSearchTap),
         const SizedBox(width: 8),
-
-        // Create button
         GestureDetector(
           onTap: onCreateTap,
           child: Container(
@@ -559,7 +620,7 @@ class _ControlBar extends StatelessWidget {
   }
 }
 
-// ── Expanding search bar ───────────────────────────────────────────────────────
+// ── Search bar ────────────────────────────────────────────────────────────────
 class _SearchBar extends StatefulWidget {
   final TextEditingController controller;
   final AppColorScheme colors;
@@ -635,7 +696,7 @@ class _SearchBarState extends State<_SearchBar> {
   }
 }
 
-// ── Course list ────────────────────────────────────────────────────────────────
+// ── Course list ───────────────────────────────────────────────────────────────
 class _CourseList extends ConsumerWidget {
   final AppColorScheme colors;
   const _CourseList({required this.colors});
@@ -678,43 +739,42 @@ class _CourseList extends ConsumerWidget {
           ],
         ),
       ),
-      data: (courses) {
-        if (courses.isEmpty) return _EmptyState(colors: c);
-        return RefreshIndicator(
-          color: c.primary,
-          onRefresh: () async => ref.refresh(coursesProvider),
-          child: ListView.builder(
-            padding: const EdgeInsets.fromLTRB(16, 0, 16, 20),
-            itemCount: courses.length,
-            itemBuilder: (_, i) => _CourseItem(
-              course: courses[i],
-              colors: c,
-              onFavorite: () => ref
-                  .read(coursesProvider.notifier)
-                  .toggleFavorite(courses[i].id),
-              onSave: () =>
-                  ref.read(coursesProvider.notifier).toggleSave(courses[i].id),
-              onRename: (title, vis) => ref
-                  .read(coursesProvider.notifier)
-                  .rename(courses[i].id, title, visibility: vis),
-              onDelete: () =>
-                  ref.read(coursesProvider.notifier).delete(courses[i].id),
+      data: (courses) => courses.isEmpty
+          ? _EmptyState(colors: c)
+          : RefreshIndicator(
+              color: c.primary,
+              onRefresh: () async => ref.refresh(coursesProvider),
+              child: ListView.builder(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 20),
+                itemCount: courses.length,
+                itemBuilder: (_, i) => _CourseItem(
+                  course: courses[i],
+                  colors: c,
+                  onFavorite: () => ref
+                      .read(coursesProvider.notifier)
+                      .toggleFavorite(courses[i].id),
+                  onSave: () => ref
+                      .read(coursesProvider.notifier)
+                      .toggleSave(courses[i].id),
+                  onRename: (title, vis) => ref
+                      .read(coursesProvider.notifier)
+                      .rename(courses[i].id, title, visibility: vis),
+                  onDelete: () =>
+                      ref.read(coursesProvider.notifier).delete(courses[i].id),
+                ),
+              ),
             ),
-          ),
-        );
-      },
     );
   }
 }
 
-// ── Single course item ─────────────────────────────────────────────────────────
+// ── Course item ───────────────────────────────────────────────────────────────
 class _CourseItem extends StatelessWidget {
   final Course course;
   final AppColorScheme colors;
   final VoidCallback onFavorite;
   final VoidCallback onSave;
-  final Future<Map<String, dynamic>> Function(String title, String? visibility)
-  onRename;
+  final Future<Map<String, dynamic>> Function(String, String?) onRename;
   final Future<Map<String, dynamic>> Function() onDelete;
 
   const _CourseItem({
@@ -743,14 +803,17 @@ class _CourseItem extends StatelessWidget {
         borderRadius: BorderRadius.circular(14),
         child: InkWell(
           borderRadius: BorderRadius.circular(14),
-          onTap: () {
-            // TODO: navigate to course detail (next step)
-          },
+          onTap: () => Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => CourseDetailScreen(course: course),
+            ),
+          ),
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
             child: Row(
               children: [
-                // Avatar circle with initial
+                // Course initial avatar
                 Container(
                   width: 46,
                   height: 46,
@@ -772,10 +835,7 @@ class _CourseItem extends StatelessWidget {
                     ),
                   ),
                 ),
-
                 const SizedBox(width: 12),
-
-                // Title + meta
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -793,7 +853,6 @@ class _CourseItem extends StatelessWidget {
                       const SizedBox(height: 4),
                       Row(
                         children: [
-                          // Owner
                           Icon(
                             course.isMine
                                 ? Icons.person_outline
@@ -811,7 +870,6 @@ class _CourseItem extends StatelessWidget {
                             ),
                           ),
                           const SizedBox(width: 8),
-                          // Visibility badge
                           Container(
                             padding: const EdgeInsets.symmetric(
                               horizontal: 6,
@@ -839,7 +897,6 @@ class _CourseItem extends StatelessWidget {
                               ),
                             ),
                           ),
-                          // Saved badge
                           if (course.isSaved && !course.isMine) ...[
                             const SizedBox(width: 6),
                             Container(
@@ -866,10 +923,7 @@ class _CourseItem extends StatelessWidget {
                     ],
                   ),
                 ),
-
                 const SizedBox(width: 4),
-
-                // Favorite star (only owner can favorite their own)
                 if (course.isMine)
                   GestureDetector(
                     onTap: onFavorite,
@@ -890,7 +944,6 @@ class _CourseItem extends StatelessWidget {
                       ),
                     ),
                   )
-                // Save icon for others' public courses
                 else
                   GestureDetector(
                     onTap: onSave,
@@ -909,10 +962,7 @@ class _CourseItem extends StatelessWidget {
                       ),
                     ),
                   ),
-
                 const SizedBox(width: 2),
-
-                // 3-dot menu
                 _CourseMenu(
                   course: course,
                   colors: c,
@@ -929,7 +979,7 @@ class _CourseItem extends StatelessWidget {
   }
 }
 
-// ── 3-dot popup menu ──────────────────────────────────────────────────────────
+// ── 3-dot menu ────────────────────────────────────────────────────────────────
 class _CourseMenu extends StatelessWidget {
   final Course course;
   final AppColorScheme colors;
@@ -963,22 +1013,19 @@ class _CourseMenu extends StatelessWidget {
             if (result != null) {
               await onRename(result['title']!, result['visibility']);
             }
-            break;
           case 'delete':
             final confirmed = await _confirmDelete(context, c);
             if (confirmed == true) await onDelete();
-            break;
           case 'save':
             onSave?.call();
-            break;
         }
       },
       itemBuilder: (_) => [
         if (course.isMine) ...[
-          _menuItem('rename', Icons.edit_outlined, 'Rename', c),
-          _menuItem('delete', Icons.delete_outline, 'Delete', c, danger: true),
+          _item('rename', Icons.edit_outlined, 'Rename', c),
+          _item('delete', Icons.delete_outline, 'Delete', c, danger: true),
         ] else ...[
-          _menuItem(
+          _item(
             'save',
             course.isSaved
                 ? Icons.bookmark_remove_outlined
@@ -991,7 +1038,7 @@ class _CourseMenu extends StatelessWidget {
     );
   }
 
-  PopupMenuItem<String> _menuItem(
+  PopupMenuItem<String> _item(
     String value,
     IconData icon,
     String label,
@@ -1017,67 +1064,63 @@ class _CourseMenu extends StatelessWidget {
   }
 
   Future<Map<String, String>?> _showEditSheet(
-    BuildContext context,
+    BuildContext ctx,
     AppColorScheme c,
-  ) {
-    return showModalBottomSheet<Map<String, String>>(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (_) => _EditCourseSheet(course: course, colors: c),
-    );
-  }
+  ) => showModalBottomSheet<Map<String, String>>(
+    context: ctx,
+    isScrollControlled: true,
+    backgroundColor: Colors.transparent,
+    builder: (_) => _EditCourseSheet(course: course, colors: c),
+  );
 
-  Future<bool?> _confirmDelete(BuildContext context, AppColorScheme c) {
-    return showDialog<bool>(
-      context: context,
-      barrierColor: Colors.black.withOpacity(0.6),
-      builder: (ctx) => AlertDialog(
-        backgroundColor: c.surface,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(20),
-          side: BorderSide(color: c.borderDefault),
-        ),
-        title: Text(
-          'Delete Course',
-          style: TextStyle(color: c.text, fontWeight: FontWeight.w700),
-        ),
-        content: Text(
-          'Delete "${course.title}"? This cannot be undone.',
-          style: TextStyle(color: c.textSecondary, fontSize: 14),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: Text('Cancel', style: TextStyle(color: c.textSecondary)),
+  Future<bool?> _confirmDelete(BuildContext ctx, AppColorScheme c) =>
+      showDialog<bool>(
+        context: ctx,
+        barrierColor: Colors.black.withOpacity(0.6),
+        builder: (d) => AlertDialog(
+          backgroundColor: c.surface,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+            side: BorderSide(color: c.borderDefault),
           ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: c.borderError,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(10),
+          title: Text(
+            'Delete Course',
+            style: TextStyle(color: c.text, fontWeight: FontWeight.w700),
+          ),
+          content: Text(
+            'Delete "${course.title}"? This cannot be undone.',
+            style: TextStyle(color: c.textSecondary, fontSize: 14),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(d, false),
+              child: Text('Cancel', style: TextStyle(color: c.textSecondary)),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: c.borderError,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
+              ),
+              onPressed: () => Navigator.pop(d, true),
+              child: const Text(
+                'Delete',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w600,
+                ),
               ),
             ),
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text(
-              'Delete',
-              style: TextStyle(
-                color: Colors.white,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
+          ],
+        ),
+      );
 }
 
-// ── Create course bottom sheet ─────────────────────────────────────────────────
+// ── Create course sheet ───────────────────────────────────────────────────────
 class _CreateCourseSheet extends StatefulWidget {
   final AppColorScheme colors;
   const _CreateCourseSheet({required this.colors});
-
   @override
   State<_CreateCourseSheet> createState() => _CreateCourseSheetState();
 }
@@ -1086,7 +1129,6 @@ class _CreateCourseSheetState extends State<_CreateCourseSheet> {
   final _titleCtrl = TextEditingController();
   final _descCtrl = TextEditingController();
   String _visibility = 'private';
-
   AppColorScheme get c => widget.colors;
 
   @override
@@ -1111,7 +1153,6 @@ class _CreateCourseSheetState extends State<_CreateCourseSheet> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            // Handle
             Container(
               width: 40,
               height: 4,
@@ -1130,73 +1171,16 @@ class _CreateCourseSheetState extends State<_CreateCourseSheet> {
               ),
             ),
             const SizedBox(height: 20),
-
-            // Title field
-            TextField(
-              controller: _titleCtrl,
+            _field(
+              _titleCtrl,
+              'Course title',
+              Icons.book_outlined,
+              c,
               autofocus: true,
-              style: TextStyle(color: c.text, fontSize: 14),
-              decoration: InputDecoration(
-                hintText: 'Course title',
-                hintStyle: TextStyle(color: c.hint),
-                filled: true,
-                fillColor: c.fieldBg,
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: BorderSide(color: c.borderDefault),
-                ),
-                enabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: BorderSide(color: c.borderDefault),
-                ),
-                focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: BorderSide(color: c.borderFocus, width: 2),
-                ),
-                contentPadding: const EdgeInsets.symmetric(
-                  horizontal: 14,
-                  vertical: 14,
-                ),
-                prefixIcon: Icon(
-                  Icons.book_outlined,
-                  color: c.iconDefault,
-                  size: 20,
-                ),
-              ),
             ),
             const SizedBox(height: 12),
-
-            // Description
-            TextField(
-              controller: _descCtrl,
-              maxLines: 3,
-              style: TextStyle(color: c.text, fontSize: 14),
-              decoration: InputDecoration(
-                hintText: 'Description (optional)',
-                hintStyle: TextStyle(color: c.hint),
-                filled: true,
-                fillColor: c.fieldBg,
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: BorderSide(color: c.borderDefault),
-                ),
-                enabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: BorderSide(color: c.borderDefault),
-                ),
-                focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: BorderSide(color: c.borderFocus, width: 2),
-                ),
-                contentPadding: const EdgeInsets.symmetric(
-                  horizontal: 14,
-                  vertical: 12,
-                ),
-              ),
-            ),
+            _field(_descCtrl, 'Description (optional)', null, c, maxLines: 3),
             const SizedBox(height: 14),
-
-            // Visibility toggle
             Row(
               children: [
                 Text(
@@ -1216,8 +1200,6 @@ class _CreateCourseSheetState extends State<_CreateCourseSheet> {
               ],
             ),
             const SizedBox(height: 20),
-
-            // Create button
             SizedBox(
               width: double.infinity,
               height: 50,
@@ -1253,14 +1235,54 @@ class _CreateCourseSheetState extends State<_CreateCourseSheet> {
       ),
     );
   }
+
+  Widget _field(
+    TextEditingController ctrl,
+    String hint,
+    IconData? icon,
+    AppColorScheme c, {
+    bool autofocus = false,
+    int maxLines = 1,
+  }) {
+    return TextField(
+      controller: ctrl,
+      autofocus: autofocus,
+      maxLines: maxLines,
+      style: TextStyle(color: c.text, fontSize: 14),
+      decoration: InputDecoration(
+        hintText: hint,
+        hintStyle: TextStyle(color: c.hint),
+        filled: true,
+        fillColor: c.fieldBg,
+        prefixIcon: icon != null
+            ? Icon(icon, color: c.iconDefault, size: 20)
+            : null,
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide(color: c.borderDefault),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide(color: c.borderDefault),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide(color: c.borderFocus, width: 2),
+        ),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 14,
+          vertical: 14,
+        ),
+      ),
+    );
+  }
 }
 
-// ── Edit course sheet ──────────────────────────────────────────────────────────
+// ── Edit course sheet ─────────────────────────────────────────────────────────
 class _EditCourseSheet extends StatefulWidget {
   final Course course;
   final AppColorScheme colors;
   const _EditCourseSheet({required this.course, required this.colors});
-
   @override
   State<_EditCourseSheet> createState() => _EditCourseSheetState();
 }
@@ -1268,7 +1290,6 @@ class _EditCourseSheet extends StatefulWidget {
 class _EditCourseSheetState extends State<_EditCourseSheet> {
   late final TextEditingController _titleCtrl;
   late String _visibility;
-
   AppColorScheme get c => widget.colors;
 
   @override
@@ -1326,6 +1347,11 @@ class _EditCourseSheetState extends State<_EditCourseSheet> {
                 hintStyle: TextStyle(color: c.hint),
                 filled: true,
                 fillColor: c.fieldBg,
+                prefixIcon: Icon(
+                  Icons.book_outlined,
+                  color: c.iconDefault,
+                  size: 20,
+                ),
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
                   borderSide: BorderSide(color: c.borderDefault),
@@ -1341,11 +1367,6 @@ class _EditCourseSheetState extends State<_EditCourseSheet> {
                 contentPadding: const EdgeInsets.symmetric(
                   horizontal: 14,
                   vertical: 14,
-                ),
-                prefixIcon: Icon(
-                  Icons.book_outlined,
-                  color: c.iconDefault,
-                  size: 20,
                 ),
               ),
             ),
@@ -1405,7 +1426,7 @@ class _EditCourseSheetState extends State<_EditCourseSheet> {
   }
 }
 
-// ── Visibility toggle pill ─────────────────────────────────────────────────────
+// ── Visibility toggle ─────────────────────────────────────────────────────────
 class _VisToggle extends StatelessWidget {
   final String value;
   final AppColorScheme colors;
@@ -1471,12 +1492,11 @@ class _VisToggle extends StatelessWidget {
   }
 }
 
-// ── Small icon button helper ───────────────────────────────────────────────────
+// ── Small icon button ─────────────────────────────────────────────────────────
 class _IconBtn extends StatelessWidget {
   final IconData icon;
   final AppColorScheme colors;
   final VoidCallback onTap;
-
   const _IconBtn({
     required this.icon,
     required this.colors,
@@ -1502,7 +1522,7 @@ class _IconBtn extends StatelessWidget {
   }
 }
 
-// ── Empty state ────────────────────────────────────────────────────────────────
+// ── Empty state ───────────────────────────────────────────────────────────────
 class _EmptyState extends StatelessWidget {
   final AppColorScheme colors;
   const _EmptyState({required this.colors});
@@ -1547,11 +1567,10 @@ class _EmptyState extends StatelessWidget {
   }
 }
 
-// ── Bottom navigation ──────────────────────────────────────────────────────────
+// ── Bottom nav ────────────────────────────────────────────────────────────────
 class _BottomNav extends StatelessWidget {
   final int current;
   final ValueChanged<int> onTap;
-
   const _BottomNav({required this.current, required this.onTap});
 
   @override
@@ -1625,7 +1644,7 @@ class _BottomNav extends StatelessWidget {
   }
 }
 
-// ── Placeholder tabs ───────────────────────────────────────────────────────────
+// ── Placeholder tab ───────────────────────────────────────────────────────────
 class _PlaceholderTab extends StatelessWidget {
   final int index;
   const _PlaceholderTab({required this.index});

@@ -80,7 +80,7 @@ class AppColorScheme {
   );
 
   static const light = AppColorScheme(
-    bg: Color(0xFFF4F6FC),
+    bg: Color.fromARGB(255, 216, 216, 217),
     surface: Color(0xFFFFFFFF),
     surfaceElevated: Color(0xFFF0F2FA),
     fieldBg: Color(0xFFF0F2FA),
