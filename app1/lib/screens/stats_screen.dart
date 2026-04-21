@@ -1,7 +1,11 @@
+// lib/screens/stats_screen.dart
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:gap/gap.dart';
+import 'package:lottie/lottie.dart';
 import '../providers/stats_provider.dart';
+import '../providers/focus_provider.dart';
 import '../services/stats_api_service.dart';
 import '../theme/app_colors.dart';
 import '../widgets/shimmer_box.dart';
@@ -29,7 +33,10 @@ class StatsScreen extends ConsumerWidget {
               : _StatsBody(
                   data: data,
                   colors: c,
-                  onRefresh: () => ref.refresh(statsProvider),
+                  onRefresh: () {
+                    ref.refresh(statsProvider);
+                    ref.refresh(focusStatsProvider);
+                  },
                 ),
         ),
       ),
@@ -112,6 +119,16 @@ class _StatsBody extends StatelessWidget {
             _TopRow(data: data, colors: c),
             const Gap(20),
 
+            // ── Focus stats ──
+            _SectionTitle(
+              label: 'Focus Mode',
+              icon: Icons.timer_outlined,
+              colors: c,
+            ),
+            const Gap(12),
+            _FocusStatsSection(data: data, colors: c),
+            const Gap(20),
+
             // ── Activity chart ──
             _SectionTitle(
               label: 'Activity',
@@ -154,6 +171,271 @@ class _StatsBody extends StatelessWidget {
             ],
           ],
         ),
+      ),
+    );
+  }
+}
+
+// ── Focus stats section ───────────────────────────────────────────────────────
+// Reads from StatsData.focus (backend /stats endpoint)
+// so it shows the correct per-user streak without a separate API call.
+class _FocusStatsSection extends StatelessWidget {
+  final StatsData data;
+  final AppColorScheme colors;
+
+  const _FocusStatsSection({required this.data, required this.colors});
+
+  String _fmtMin(int m) {
+    if (m == 0) return '0m';
+    if (m < 60) return '${m}m';
+    final h = m ~/ 60;
+    final rem = m % 60;
+    return rem == 0 ? '${h}h' : '${h}h ${rem}m';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final c = colors;
+    final focus = data.focus;
+    final streak = (focus['streak'] as num?)?.toInt() ?? 0;
+    final todayMinutes = (focus['today_minutes'] as num?)?.toInt() ?? 0;
+    final totalSessions =
+        (focus['total_completed_sessions'] as num?)?.toInt() ?? 0;
+
+    // Weekly focus activity from backend
+    final weeklyRaw = focus['weekly_focus_activity'] as List<dynamic>? ?? [];
+    final weekly = weeklyRaw
+        .map((e) => Map<String, dynamic>.from(e as Map))
+        .toList();
+
+    final maxMins = weekly
+        .map((e) => (e['mins'] as num?)?.toInt() ?? 0)
+        .fold(0, (a, b) => a > b ? a : b);
+    final effectiveMax = maxMins == 0 ? 1 : maxMins;
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: c.cardBg,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: c.cardBorder),
+      ),
+      child: Column(
+        children: [
+          // ── Streak banner with Lottie fire ──────────────────────────────
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+            margin: const EdgeInsets.only(bottom: 16),
+            decoration: BoxDecoration(
+              color: const Color(0xFFF59E0B).withOpacity(0.1),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: const Color(0xFFF59E0B).withOpacity(0.25),
+              ),
+            ),
+            child: Row(
+              children: [
+                // Lottie fire when streak > 0, static emoji otherwise
+                SizedBox(
+                  width: 52,
+                  height: 52,
+                  child: streak > 0
+                      ? Lottie.asset(
+                          'lotties/fire.json',
+                          fit: BoxFit.contain,
+                          repeat: true,
+                        )
+                      : const Center(
+                          child: Text('🔥', style: TextStyle(fontSize: 32)),
+                        ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        children: [
+                          Text(
+                            '$streak',
+                            style: const TextStyle(
+                              fontSize: 32,
+                              fontWeight: FontWeight.w800,
+                              color: Color(0xFFF59E0B),
+                              fontFeatures: [FontFeature.tabularFigures()],
+                              height: 1,
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                          Padding(
+                            padding: const EdgeInsets.only(bottom: 3),
+                            child: Text(
+                              streak == 1 ? 'day streak' : 'days streak',
+                              style: TextStyle(
+                                fontSize: 15,
+                                fontWeight: FontWeight.w600,
+                                color: c.text,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 3),
+                      Text(
+                        streak == 0
+                            ? 'Complete a session to start your streak'
+                            : 'Keep it up ',
+                        style: TextStyle(fontSize: 11, color: c.textSecondary),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          // ── Today + total sessions ───────────────────────────────────────
+          Row(
+            children: [
+              Expanded(
+                child: _FocusStatBox(
+                  value: _fmtMin(todayMinutes),
+                  label: 'Today',
+                  icon: Icons.today_rounded,
+                  color: c.primary,
+                  colors: c,
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: _FocusStatBox(
+                  value: '$totalSessions',
+                  label: 'Sessions',
+                  icon: Icons.check_circle_outline_rounded,
+                  color: const Color(0xFF10B981),
+                  colors: c,
+                ),
+              ),
+            ],
+          ),
+
+          // ── Weekly mini bar chart ────────────────────────────────────────
+          if (weekly.isNotEmpty) ...[
+            const SizedBox(height: 16),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: weekly.map((day) {
+                final mins = (day['mins'] as num?)?.toInt() ?? 0;
+                final label = day['day'] as String? ?? '';
+                final ratio = mins / effectiveMax;
+                final active = mins > 0;
+
+                return Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 3),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      children: [
+                        if (mins > 0)
+                          Text(
+                            mins < 60 ? '${mins}m' : '${mins ~/ 60}h',
+                            style: TextStyle(
+                              color: c.primary,
+                              fontSize: 8,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          )
+                        else
+                          const SizedBox(height: 11),
+                        const SizedBox(height: 3),
+                        AnimatedContainer(
+                          duration: const Duration(milliseconds: 500),
+                          curve: Curves.easeOut,
+                          height: (48 * ratio).clamp(3.0, 48.0),
+                          decoration: BoxDecoration(
+                            color: active
+                                ? c.primary
+                                : c.borderDefault.withOpacity(0.4),
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                        ),
+                        const SizedBox(height: 5),
+                        Text(
+                          label,
+                          style: TextStyle(color: c.textSecondary, fontSize: 9),
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              }).toList(),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _FocusStatBox extends StatelessWidget {
+  final String value;
+  final String label;
+  final IconData icon;
+  final Color color;
+  final AppColorScheme colors;
+
+  const _FocusStatBox({
+    required this.value,
+    required this.label,
+    required this.icon,
+    required this.color,
+    required this.colors,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final c = colors;
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: c.fieldBg,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: c.borderDefault),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 32,
+            height: 32,
+            decoration: BoxDecoration(
+              color: color.withOpacity(0.12),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Icon(icon, size: 15, color: color),
+          ),
+          const SizedBox(width: 10),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                value,
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w800,
+                  color: c.text,
+                  fontFeatures: const [FontFeature.tabularFigures()],
+                  height: 1,
+                ),
+              ),
+              Text(
+                label,
+                style: TextStyle(fontSize: 10, color: c.textSecondary),
+              ),
+            ],
+          ),
+        ],
       ),
     );
   }
@@ -385,7 +667,6 @@ class _AiBreakdown extends StatelessWidget {
       ),
       child: Column(
         children: [
-          // ── Stacked progress bar ──
           if (total > 0) ...[
             _StackedBar(
               segments: [
@@ -408,7 +689,6 @@ class _AiBreakdown extends StatelessWidget {
             ),
             const SizedBox(height: 16),
           ],
-          // ── Rows ──
           _AiRow(
             icon: Icons.style_outlined,
             label: 'Flashcard Sets',
@@ -823,6 +1103,8 @@ class _ShimmerStats extends StatelessWidget {
               ),
             ],
           ),
+          const Gap(20),
+          ShimmerBox(width: double.infinity, height: 200, radius: 16),
           const Gap(20),
           ShimmerBox(width: double.infinity, height: 130, radius: 16),
           const Gap(20),

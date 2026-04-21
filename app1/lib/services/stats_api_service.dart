@@ -1,3 +1,5 @@
+// lib/services/stats_api_service.dart
+
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
@@ -7,6 +9,7 @@ class StatsData {
   final Map<String, dynamic> sources;
   final Map<String, dynamic> ai;
   final Map<String, dynamic> social;
+  final Map<String, dynamic> focus;
   final List<Map<String, dynamic>> activity;
   final List<Map<String, dynamic>> recentActivity;
 
@@ -15,6 +18,7 @@ class StatsData {
     required this.sources,
     required this.ai,
     required this.social,
+    required this.focus,
     required this.activity,
     required this.recentActivity,
   });
@@ -25,6 +29,9 @@ class StatsData {
       sources: Map<String, dynamic>.from(json['sources'] as Map),
       ai: Map<String, dynamic>.from(json['ai'] as Map),
       social: Map<String, dynamic>.from(json['social'] as Map),
+      focus: json['focus'] != null
+          ? Map<String, dynamic>.from(json['focus'] as Map)
+          : {},
       activity: (json['activity'] as List)
           .map((e) => Map<String, dynamic>.from(e as Map))
           .toList(),

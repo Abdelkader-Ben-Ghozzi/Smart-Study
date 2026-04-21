@@ -1,3 +1,4 @@
+import 'package:app1/screens/focus_page.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:gap/gap.dart';
@@ -11,6 +12,7 @@ import '../theme/app_theme.dart';
 import '../widgets/shimmer_box.dart';
 import 'profile_screen.dart';
 import 'stats_screen.dart';
+import 'assistant_screen.dart';
 
 // ── Accent palette ────────────────────────────────────────────────────────────
 const _kAccents = [
@@ -57,11 +59,10 @@ class _HomeScaffold extends ConsumerStatefulWidget {
 class _HomeScaffoldState extends ConsumerState<_HomeScaffold> {
   int _navIndex = 0;
 
-  // ── Use IndexedStack so pages keep their state ────────────────────────────
   final _pages = const [
     _CoursesPage(),
-    _PlaceholderTab(index: 1),
-    _PlaceholderTab(index: 2),
+    FocusPage(),
+    AssistantScreen(),
     StatsScreen(),
     ProfileScreen(),
   ];
@@ -963,6 +964,7 @@ class _CourseItem extends StatelessWidget {
                     ),
                   ),
                 const SizedBox(width: 2),
+
                 _CourseMenu(
                   course: course,
                   colors: c,
@@ -1578,8 +1580,8 @@ class _BottomNav extends StatelessWidget {
     final c = AppColors.of(context);
     final items = [
       (Icons.home_rounded, Icons.home_outlined, 'Home'),
-      (Icons.book_rounded, Icons.book_outlined, 'Subjects'),
-      (Icons.style_rounded, Icons.style_outlined, 'Review'),
+      (Icons.book_rounded, Icons.book_outlined, 'Focus'),
+      (Icons.chat_rounded, Icons.chat_outlined, 'Help'),
       (Icons.bar_chart_rounded, Icons.bar_chart_outlined, 'Stats'),
       (Icons.person_rounded, Icons.person_outlined, 'Profile'),
     ];

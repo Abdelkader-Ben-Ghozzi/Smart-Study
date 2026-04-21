@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="accessibility_service_description">
+        SmartStudy uses this service to redirect you away from blocked apps
+        during a focus session.
+    </string>
+</resources>
