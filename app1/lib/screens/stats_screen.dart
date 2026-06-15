@@ -223,78 +223,77 @@ class _FocusStatsSection extends StatelessWidget {
       child: Column(
         children: [
           // ── Streak banner with Lottie fire ──────────────────────────────
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
-            margin: const EdgeInsets.only(bottom: 16),
-            decoration: BoxDecoration(
-              color: const Color(0xFFF59E0B).withOpacity(0.1),
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(
-                color: const Color(0xFFF59E0B).withOpacity(0.25),
-              ),
-            ),
-            child: Row(
-              children: [
-                // Lottie fire when streak > 0, static emoji otherwise
-                SizedBox(
-                  width: 52,
-                  height: 52,
-                  child: streak > 0
-                      ? Lottie.asset(
-                          'lotties/fire.json',
-                          fit: BoxFit.contain,
-                          repeat: true,
-                        )
-                      : const Center(
-                          child: Text('🔥', style: TextStyle(fontSize: 32)),
-                        ),
+          if (streak > 0)
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+              margin: const EdgeInsets.only(bottom: 16),
+              decoration: BoxDecoration(
+                color: const Color(0xFFF59E0B).withOpacity(0.1),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: const Color(0xFFF59E0B).withOpacity(0.25),
                 ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        crossAxisAlignment: CrossAxisAlignment.end,
-                        children: [
-                          Text(
-                            '$streak',
-                            style: const TextStyle(
-                              fontSize: 32,
-                              fontWeight: FontWeight.w800,
-                              color: Color(0xFFF59E0B),
-                              fontFeatures: [FontFeature.tabularFigures()],
-                              height: 1,
-                            ),
-                          ),
-                          const SizedBox(width: 6),
-                          Padding(
-                            padding: const EdgeInsets.only(bottom: 3),
-                            child: Text(
-                              streak == 1 ? 'day streak' : 'days streak',
-                              style: TextStyle(
-                                fontSize: 15,
-                                fontWeight: FontWeight.w600,
-                                color: c.text,
+              ),
+              child: Row(
+                children: [
+                  SizedBox(
+                    width: 52,
+                    height: 52,
+                    child: Lottie.asset(
+                      'lotties/fire.json',
+                      fit: BoxFit.contain,
+                      repeat: true,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          children: [
+                            Text(
+                              '$streak',
+                              style: const TextStyle(
+                                fontSize: 32,
+                                fontWeight: FontWeight.w800,
+                                color: Color(0xFFF59E0B),
+                                fontFeatures: [FontFeature.tabularFigures()],
+                                height: 1,
                               ),
                             ),
+                            const SizedBox(width: 6),
+                            Padding(
+                              padding: const EdgeInsets.only(bottom: 3),
+                              child: Text(
+                                streak == 1 ? 'day streak' : 'days streak',
+                                style: TextStyle(
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.w600,
+                                  color: c.text,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 3),
+                        Text(
+                          streak == 0
+                              ? 'Complete a session to start your streak'
+                              : 'Keep it up ',
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: c.textSecondary,
                           ),
-                        ],
-                      ),
-                      const SizedBox(height: 3),
-                      Text(
-                        streak == 0
-                            ? 'Complete a session to start your streak'
-                            : 'Keep it up ',
-                        style: TextStyle(fontSize: 11, color: c.textSecondary),
-                      ),
-                    ],
+                        ),
+                      ],
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
-          ),
 
           // ── Today + total sessions ───────────────────────────────────────
           Row(

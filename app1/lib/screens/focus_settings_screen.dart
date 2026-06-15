@@ -1,5 +1,4 @@
 // lib/screens/focus_settings_screen.dart
-
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -8,7 +7,6 @@ import '../providers/focus_provider.dart';
 import '../theme/app_colors.dart';
 import '../models/focus_session.dart';
 import '../services/focus_service.dart';
-import 'active_focus_screen.dart';
 
 // ── Installed apps provider ────────────────────────────────────────────────
 final installedAppsProvider = FutureProvider<List<AppInfo>>((ref) async {
@@ -18,7 +16,6 @@ final installedAppsProvider = FutureProvider<List<AppInfo>>((ref) async {
     includeSystem: false,
     onlyLaunchable: true,
   );
-  // Filter out SmartStudy itself
   apps.removeWhere((a) => a.packageName == 'com.example.app1');
   apps.sort(
     (a, b) => (a.appName ?? '').toLowerCase().compareTo(
@@ -47,6 +44,7 @@ class _FocusSettingsScreenState extends ConsumerState<FocusSettingsScreen> {
   _SortMode _sortMode = _SortMode.alphabetical;
   Map<String, int> _usageMinutes = {};
   bool _loadingUsage = false;
+  bool _hasUsagePerm = false;
 
   static const _durations = [30, 60, 90];
 
@@ -61,17 +59,79 @@ class _FocusSettingsScreenState extends ConsumerState<FocusSettingsScreen> {
           _blockedApps = s.blockedApps.toSet();
         });
       }
+      if (Platform.isAndroid) _checkUsagePerm();
     });
+  }
+
+  Future<void> _checkUsagePerm() async {
+    final has = await FocusService.hasUsageStatsPermission();
+    if (mounted) setState(() => _hasUsagePerm = has);
   }
 
   Future<void> _loadUsageStats() async {
     if (_loadingUsage) return;
+
+    // If no permission, ask for it first
+    if (!_hasUsagePerm) {
+      await _showUsagePermissionDialog();
+      await _checkUsagePerm();
+      if (!_hasUsagePerm) {
+        if (mounted) {
+          setState(() => _sortMode = _SortMode.alphabetical);
+        }
+        return;
+      }
+    }
+
     setState(() => _loadingUsage = true);
     try {
       final stats = await FocusService.getUsageStats();
-      setState(() => _usageMinutes = stats);
+      if (mounted) setState(() => _usageMinutes = stats);
     } catch (_) {}
-    setState(() => _loadingUsage = false);
+    if (mounted) setState(() => _loadingUsage = false);
+  }
+
+  Future<void> _showUsagePermissionDialog() async {
+    final c = AppColors.of(context);
+    await showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: c.surface,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
+          side: BorderSide(color: c.borderDefault),
+        ),
+        title: Text(
+          'Usage access needed',
+          style: TextStyle(color: c.text, fontWeight: FontWeight.w700),
+        ),
+        content: Text(
+          'To sort apps by screen time, SmartStudy needs Usage Access permission.\n\nIn the next screen, find "SmartStudy" and enable it.',
+          style: TextStyle(color: c.textSecondary, fontSize: 14, height: 1.5),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: Text('Not now', style: TextStyle(color: c.textSecondary)),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: c.primary,
+              foregroundColor: Colors.white,
+              elevation: 0,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
+            ),
+            onPressed: () async {
+              await FocusService.requestUsageStatsPermission();
+              if (ctx.mounted) Navigator.pop(ctx);
+            },
+            child: const Text('Open Settings'),
+          ),
+        ],
+      ),
+    );
   }
 
   Future<bool> _ensurePermissions() async {
@@ -195,12 +255,7 @@ class _FocusSettingsScreenState extends ConsumerState<FocusSettingsScreen> {
     if (!mounted) return;
 
     if (started) {
-      Navigator.of(context).pushReplacement(
-        MaterialPageRoute(
-          builder: (_) =>
-              ActiveFocusScreen(blockedPackages: _blockedApps.toList()),
-        ),
-      );
+      Navigator.of(context).pop();
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -248,7 +303,7 @@ class _FocusSettingsScreenState extends ConsumerState<FocusSettingsScreen> {
             child: ListView(
               padding: const EdgeInsets.fromLTRB(16, 0, 16, 20),
               children: [
-                // ── Duration ──────────────────────────────────────────────
+                // ── Duration ──────────────────────────────────────────
                 _SectionLabel('Session duration'),
                 Row(
                   children: [
@@ -278,7 +333,7 @@ class _FocusSettingsScreenState extends ConsumerState<FocusSettingsScreen> {
                   ],
                 ),
 
-                // ── Apps to block ─────────────────────────────────────────
+                // ── Apps to block ─────────────────────────────────────
                 Padding(
                   padding: const EdgeInsets.only(top: 20, bottom: 4),
                   child: Divider(color: c.divider),
@@ -295,7 +350,7 @@ class _FocusSettingsScreenState extends ConsumerState<FocusSettingsScreen> {
                     onRemove: (n) => setState(() => _blockedApps.remove(n)),
                   )
                 else ...[
-                  // ── Sort toggle ──────────────────────────────────────
+                  // ── Sort toggle ──────────────────────────────────
                   Container(
                     margin: const EdgeInsets.only(bottom: 12),
                     decoration: BoxDecoration(
@@ -328,7 +383,7 @@ class _FocusSettingsScreenState extends ConsumerState<FocusSettingsScreen> {
                     ),
                   ),
 
-                  // ── Search ───────────────────────────────────────────
+                  // ── Search ───────────────────────────────────────
                   Container(
                     height: 40,
                     margin: const EdgeInsets.only(bottom: 12),
@@ -368,7 +423,7 @@ class _FocusSettingsScreenState extends ConsumerState<FocusSettingsScreen> {
                       ),
                     ),
 
-                  // ── App list ─────────────────────────────────────────
+                  // ── App list ─────────────────────────────────────
                   ref
                       .watch(installedAppsProvider)
                       .when(
@@ -412,7 +467,6 @@ class _FocusSettingsScreenState extends ConsumerState<FocusSettingsScreen> {
                                     )
                                     .toList();
 
-                          // Sort by screen time if selected
                           if (_sortMode == _SortMode.screenTime &&
                               _usageMinutes.isNotEmpty) {
                             filtered = List.from(filtered);
@@ -473,7 +527,7 @@ class _FocusSettingsScreenState extends ConsumerState<FocusSettingsScreen> {
             ),
           ),
 
-          // ── Bottom button ──────────────────────────────────────────────
+          // ── Bottom button ──────────────────────────────────────────
           Container(
             color: c.bg,
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
@@ -574,14 +628,12 @@ class _FocusSettingsScreenState extends ConsumerState<FocusSettingsScreen> {
   }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Sort tab widget
-// ─────────────────────────────────────────────────────────────────────────────
+// ── Widgets ──────────────────────────────────────────────────────────────────
+
 class _SortTab extends StatelessWidget {
   final String label;
   final bool selected;
   final VoidCallback onTap;
-
   const _SortTab({
     required this.label,
     required this.selected,
@@ -626,9 +678,6 @@ class _SortTab extends StatelessWidget {
   }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// App list item
-// ─────────────────────────────────────────────────────────────────────────────
 class _AppListItem extends StatelessWidget {
   final AppInfo app;
   final bool checked;
@@ -718,9 +767,6 @@ class _AppListItem extends StatelessWidget {
   }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// iOS manual entry
-// ─────────────────────────────────────────────────────────────────────────────
 class _IosManualEntry extends StatefulWidget {
   final Set<String> blockedApps;
   final void Function(String) onAdd;
@@ -843,9 +889,6 @@ class _IosManualEntryState extends State<_IosManualEntry> {
   }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Shared helpers
-// ─────────────────────────────────────────────────────────────────────────────
 class _SectionLabel extends StatelessWidget {
   final String text;
   const _SectionLabel(this.text);

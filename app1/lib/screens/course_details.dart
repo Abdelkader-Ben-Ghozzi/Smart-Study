@@ -9,6 +9,7 @@ import '../models/course_details_models.dart';
 import '../providers/course_details_provider.dart';
 import '../theme/app_colors.dart';
 import '../widgets/shimmer_box.dart';
+import '../screens/offline_screen.dart'; // ← ADD THIS
 
 // ─────────────────────────────────────────────────────────────────────────────
 // CourseDetailScreen
@@ -37,7 +38,8 @@ class CourseDetailScreen extends ConsumerWidget {
 }
 
 // ── AppBar ────────────────────────────────────────────────────────────────────
-class _CourseAppBar extends StatelessWidget implements PreferredSizeWidget {
+class _CourseAppBar extends ConsumerStatefulWidget
+    implements PreferredSizeWidget {
   final Course course;
   final AppColorScheme colors;
   const _CourseAppBar({required this.course, required this.colors});
@@ -46,8 +48,133 @@ class _CourseAppBar extends StatelessWidget implements PreferredSizeWidget {
   Size get preferredSize => const Size.fromHeight(kToolbarHeight + 52);
 
   @override
+  ConsumerState<_CourseAppBar> createState() => _CourseAppBarState();
+}
+
+class _CourseAppBarState extends ConsumerState<_CourseAppBar> {
+  bool _saving = false;
+
+  // ── Save course + all AI history to SharedPreferences ─────────────────────
+  Future<void> _saveOffline(BuildContext context) async {
+    setState(() => _saving = true);
+    final c = widget.colors;
+
+    try {
+      // Get the already-loaded AI history from the provider cache
+      final historyAsync = ref.read(aiHistoryProvider(widget.course.id));
+      final items = historyAsync.value ?? [];
+
+      // Map GeneratedContent → SavedContentLocal
+      final contents = items.map((item) {
+        Map<String, dynamic> contentJson;
+
+        switch (item.tool) {
+          case AiTool.flashcards:
+            contentJson = {
+              'cards': item.flashcards
+                  .map((f) => {'question': f.front, 'answer': f.back})
+                  .toList(),
+            };
+            break;
+          case AiTool.summary:
+            final s = item.summary;
+            contentJson = {
+              'overview': s?.overview ?? '',
+              'key_points': s?.keyPoints ?? [],
+              'sections':
+                  s?.sections
+                      .map(
+                        (sec) => {'title': sec.heading, 'content': sec.content},
+                      )
+                      .toList() ??
+                  [],
+            };
+            break;
+          case AiTool.qcm:
+            contentJson = {
+              'questions': item.questions
+                  .map(
+                    (q) => {
+                      'question': q.question,
+                      'options': q.options,
+                      'correct_index': q.correctIndex,
+                    },
+                  )
+                  .toList(),
+            };
+            break;
+        }
+
+        return SavedContentLocal(
+          id: item.id,
+          tool: item.tool.name, // 'flashcards' | 'summary' | 'qcm'
+          content: contentJson,
+          savedAt: DateTime.now(),
+        );
+      }).toList();
+
+      // Build SavedCourseLocal
+      final saved = SavedCourseLocal(
+        id: widget.course.id,
+        courseId: widget.course.id,
+        title: widget.course.title,
+        ownerName: widget.course.ownerName ?? 'Unknown',
+        isPublic: widget.course.isPublic,
+        savedAt: DateTime.now(),
+        contents: contents,
+      );
+
+      await LocalStorage.saveCourse(saved);
+
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                const Icon(
+                  Icons.check_circle_rounded,
+                  color: Colors.white,
+                  size: 16,
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  contents.isEmpty
+                      ? 'Course saved (no AI content yet)'
+                      : 'Course + ${contents.length} AI item(s) saved offline ✓',
+                ),
+              ],
+            ),
+            backgroundColor: const Color(0xFF10B981),
+            behavior: SnackBarBehavior.floating,
+            margin: const EdgeInsets.all(12),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(10),
+            ),
+          ),
+        );
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to save offline: $e'),
+            backgroundColor: widget.colors.borderError,
+            behavior: SnackBarBehavior.floating,
+            margin: const EdgeInsets.all(12),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(10),
+            ),
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final c = colors;
+    final c = widget.colors;
     return AppBar(
       backgroundColor: c.surface,
       elevation: 0,
@@ -60,7 +187,7 @@ class _CourseAppBar extends StatelessWidget implements PreferredSizeWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            course.title,
+            widget.course.title,
             style: TextStyle(
               color: c.text,
               fontSize: 16,
@@ -72,17 +199,18 @@ class _CourseAppBar extends StatelessWidget implements PreferredSizeWidget {
           Row(
             children: [
               Icon(
-                course.isMine ? Icons.person_outline : Icons.public_outlined,
+                widget.course.isMine
+                    ? Icons.person_outline
+                    : Icons.public_outlined,
                 size: 11,
                 color: c.textSecondary,
               ),
               const SizedBox(width: 3),
               Text(
-                course.isMine ? 'My course' : course.ownerName,
+                widget.course.isMine ? 'My course' : widget.course.ownerName,
                 style: TextStyle(color: c.textSecondary, fontSize: 11),
               ),
-              // Owner badge
-              if (course.isMine) ...[
+              if (widget.course.isMine) ...[
                 const SizedBox(width: 6),
                 Container(
                   padding: const EdgeInsets.symmetric(
@@ -107,6 +235,26 @@ class _CourseAppBar extends StatelessWidget implements PreferredSizeWidget {
           ),
         ],
       ),
+      // ── Download button ────────────────────────────────────────────────────
+      actions: [
+        _saving
+            ? Padding(
+                padding: const EdgeInsets.all(14),
+                child: SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(
+                    color: c.primary,
+                    strokeWidth: 2,
+                  ),
+                ),
+              )
+            : IconButton(
+                icon: Icon(Icons.download_rounded, color: c.text, size: 22),
+                tooltip: 'Save for offline',
+                onPressed: () => _saveOffline(context),
+              ),
+      ],
       bottom: PreferredSize(
         preferredSize: const Size.fromHeight(52),
         child: Padding(
@@ -157,7 +305,6 @@ class _SourcesTab extends ConsumerWidget {
 
     return Column(
       children: [
-        // Upload bar — OWNER ONLY
         if (course.isMine) ...[
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 14, 16, 0),
@@ -165,7 +312,6 @@ class _SourcesTab extends ConsumerWidget {
           ),
           const SizedBox(height: 4),
         ] else ...[
-          // Read-only banner for non-owners
           _ReadOnlyBanner(colors: c),
         ],
 
@@ -511,7 +657,6 @@ class _AiToolsTab extends ConsumerWidget {
       padding: const EdgeInsets.all(16),
       child: Column(
         children: [
-          // Tool cards — owner sees full cards, non-owner sees locked cards
           Row(
             children: [
               Expanded(
@@ -532,7 +677,6 @@ class _AiToolsTab extends ConsumerWidget {
                   tool: AiTool.summary,
                   icon: Icons.auto_awesome_outlined,
                   color: const Color(0xFF0EA5E9),
-
                   isOwner: course.isMine,
                   colors: c,
                   onTap: course.isMine
@@ -546,7 +690,6 @@ class _AiToolsTab extends ConsumerWidget {
                   tool: AiTool.qcm,
                   icon: Icons.quiz_outlined,
                   color: const Color(0xFF10B981),
-
                   isOwner: course.isMine,
                   colors: c,
                   onTap: course.isMine
@@ -559,7 +702,6 @@ class _AiToolsTab extends ConsumerWidget {
 
           const Gap(16),
 
-          // Generation loading state
           if (genState.status == GenerationStatus.loading)
             _GeneratingCard(colors: c),
 
@@ -573,7 +715,6 @@ class _AiToolsTab extends ConsumerWidget {
 
           const Gap(8),
 
-          // Saved results history — clickable, opens full screen
           _HistorySection(course: course, colors: c),
         ],
       ),
@@ -683,7 +824,7 @@ class _ToolCard extends StatelessWidget {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// AI Config sheet — with multi-select sources
+// AI Config sheet
 // ─────────────────────────────────────────────────────────────────────────────
 class _AiConfigSheet extends ConsumerStatefulWidget {
   final AiTool tool;
@@ -705,7 +846,6 @@ class _AiConfigSheetState extends ConsumerState<_AiConfigSheet> {
   final Set<int> _selectedSourceIds = {};
 
   AppColorScheme get c => widget.colors;
-
   final _counts = [5, 10, 15, 20];
   final _difficulties = ['easy', 'medium', 'hard'];
 
@@ -729,7 +869,6 @@ class _AiConfigSheetState extends ConsumerState<_AiConfigSheet> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              // Handle
               Container(
                 width: 40,
                 height: 4,
@@ -749,7 +888,7 @@ class _AiConfigSheetState extends ConsumerState<_AiConfigSheet> {
               ),
               const SizedBox(height: 20),
 
-              // ── Source selection (multi-select) ───────────────────────────────
+              // Source selection
               Align(
                 alignment: Alignment.centerLeft,
                 child: Text(
@@ -832,7 +971,7 @@ class _AiConfigSheetState extends ConsumerState<_AiConfigSheet> {
 
               const SizedBox(height: 16),
 
-              // ── Count (not for summary) ───────────────────────────────────────
+              // Count
               if (widget.tool != AiTool.summary) ...[
                 Row(
                   children: [
@@ -878,7 +1017,7 @@ class _AiConfigSheetState extends ConsumerState<_AiConfigSheet> {
                 const SizedBox(height: 14),
               ],
 
-              // ── Difficulty ────────────────────────────────────────────────────
+              // Difficulty
               if (widget.tool != AiTool.summary) ...[
                 Row(
                   children: [
@@ -931,7 +1070,7 @@ class _AiConfigSheetState extends ConsumerState<_AiConfigSheet> {
 
               const SizedBox(height: 22),
 
-              // ── Generate button ───────────────────────────────────────────────
+              // Generate button
               SizedBox(
                 width: double.infinity,
                 height: 50,
@@ -987,7 +1126,7 @@ class _AiConfigSheetState extends ConsumerState<_AiConfigSheet> {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// History section — list of saved AI results
+// History section
 // ─────────────────────────────────────────────────────────────────────────────
 class _HistorySection extends ConsumerWidget {
   final Course course;
@@ -1082,7 +1221,7 @@ class _HistorySection extends ConsumerWidget {
   }
 }
 
-// ── History tile — tapping navigates to full viewer screen ────────────────────
+// ── History tile ──────────────────────────────────────────────────────────────
 class _HistoryTile extends ConsumerWidget {
   final GeneratedContent item;
   final Course course;
@@ -1119,7 +1258,6 @@ class _HistoryTile extends ConsumerWidget {
         borderRadius: BorderRadius.circular(12),
         child: InkWell(
           borderRadius: BorderRadius.circular(12),
-          // ── Navigate to full viewer — uses Navigator.push (stackable) ──────
           onTap: () => Navigator.push(
             context,
             MaterialPageRoute(
@@ -1342,7 +1480,6 @@ class _CenteredMsg extends StatelessWidget {
 
 // ─────────────────────────────────────────────────────────────────────────────
 // CONTENT VIEWER SCREEN
-// Each tool opens a DEDICATED screen via Navigator.push (proper stack)
 // ─────────────────────────────────────────────────────────────────────────────
 class ContentViewerScreen extends StatelessWidget {
   final GeneratedContent content;
@@ -1389,7 +1526,7 @@ class ContentViewerScreen extends StatelessWidget {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// FLASHCARDS VIEWER — flip animation
+// FLASHCARDS VIEWER
 // ─────────────────────────────────────────────────────────────────────────────
 class _FlashcardsViewer extends StatefulWidget {
   final List<Flashcard> cards;
@@ -1455,7 +1592,6 @@ class _FlashcardsViewerState extends State<_FlashcardsViewer>
     final card = widget.cards[_index];
     return Column(
       children: [
-        // Progress
         Padding(
           padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
           child: Row(
@@ -1479,7 +1615,6 @@ class _FlashcardsViewerState extends State<_FlashcardsViewer>
             ],
           ),
         ),
-
         const SizedBox(height: 8),
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 20),
@@ -1493,8 +1628,6 @@ class _FlashcardsViewerState extends State<_FlashcardsViewer>
             ),
           ),
         ),
-
-        // Flip card
         Expanded(
           child: GestureDetector(
             onTap: _flip,
@@ -1503,7 +1636,6 @@ class _FlashcardsViewerState extends State<_FlashcardsViewer>
               child: AnimatedBuilder(
                 animation: _anim,
                 builder: (_, __) {
-                  // First half: show front, second half: show back
                   final showBack = _anim.value > 0.5;
                   final angle = _anim.value * math.pi;
                   return Transform(
@@ -1528,8 +1660,6 @@ class _FlashcardsViewerState extends State<_FlashcardsViewer>
             ),
           ),
         ),
-
-        // Navigation
         Padding(
           padding: const EdgeInsets.fromLTRB(20, 0, 20, 32),
           child: Row(
@@ -1557,8 +1687,6 @@ class _FlashcardsViewerState extends State<_FlashcardsViewer>
             ],
           ),
         ),
-
-        // Tap hint
         Padding(
           padding: const EdgeInsets.only(bottom: 24),
           child: Row(
@@ -1626,7 +1754,7 @@ class _CardFace extends StatelessWidget {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// SUMMARY VIEWER — clean formatted scrollable text
+// SUMMARY VIEWER
 // ─────────────────────────────────────────────────────────────────────────────
 class _SummaryViewer extends StatelessWidget {
   final Summary? summary;
@@ -1647,7 +1775,6 @@ class _SummaryViewer extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Title
           Text(
             s.title,
             style: TextStyle(
@@ -1658,8 +1785,6 @@ class _SummaryViewer extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 16),
-
-          // Overview
           Container(
             width: double.infinity,
             padding: const EdgeInsets.all(16),
@@ -1674,8 +1799,6 @@ class _SummaryViewer extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 20),
-
-          // Key points
           _SectionHeader(
             label: 'Key Points',
             icon: Icons.star_outline_rounded,
@@ -1722,11 +1845,8 @@ class _SummaryViewer extends StatelessWidget {
               ),
             ),
           ),
-
-          const SizedBox(height: 20),
-
-          // Sections
           if (s.sections.isNotEmpty) ...[
+            const SizedBox(height: 20),
             _SectionHeader(
               label: 'Sections',
               icon: Icons.list_alt_outlined,
@@ -1768,8 +1888,6 @@ class _SummaryViewer extends StatelessWidget {
               ),
             ),
           ],
-
-          // Conclusion
           if (s.conclusion.isNotEmpty) ...[
             const SizedBox(height: 8),
             _SectionHeader(
@@ -1836,7 +1954,7 @@ class _SectionHeader extends StatelessWidget {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// QCM VIEWER — one question at a time, score at the end
+// QCM VIEWER
 // ─────────────────────────────────────────────────────────────────────────────
 class _QcmViewer extends StatefulWidget {
   final List<QcmQuestion> questions;
@@ -1849,22 +1967,19 @@ class _QcmViewer extends StatefulWidget {
 
 class _QcmViewerState extends State<_QcmViewer> {
   int _current = 0;
-  // Maps question index → selected option index
   final Map<int, int> _answers = {};
   bool _showResult = false;
 
   AppColorScheme get c => widget.colors;
   List<QcmQuestion> get _qs => widget.questions;
-
   bool get _answered => _answers.containsKey(_current);
   bool get _isLast => _current == _qs.length - 1;
-
   int get _score =>
       _answers.entries.where((e) => e.value == _qs[e.key].correctIndex).length;
 
-  void _select(int optionIndex) {
-    if (_answered) return; // can't change answer
-    setState(() => _answers[_current] = optionIndex);
+  void _select(int i) {
+    if (_answered) return;
+    setState(() => _answers[_current] = i);
   }
 
   void _next() {
@@ -1879,13 +1994,11 @@ class _QcmViewerState extends State<_QcmViewer> {
     if (_current > 0) setState(() => _current--);
   }
 
-  void _restart() {
-    setState(() {
-      _current = 0;
-      _answers.clear();
-      _showResult = false;
-    });
-  }
+  void _restart() => setState(() {
+    _current = 0;
+    _answers.clear();
+    _showResult = false;
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -1897,7 +2010,6 @@ class _QcmViewerState extends State<_QcmViewer> {
 
     return Column(
       children: [
-        // ── Progress bar ──
         Padding(
           padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
           child: Row(
@@ -1930,8 +2042,6 @@ class _QcmViewerState extends State<_QcmViewer> {
             ],
           ),
         ),
-
-        // ── Question ──
         Expanded(
           child: SingleChildScrollView(
             padding: const EdgeInsets.all(20),
@@ -1939,7 +2049,6 @@ class _QcmViewerState extends State<_QcmViewer> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const SizedBox(height: 8),
-                // Question text
                 Container(
                   width: double.infinity,
                   padding: const EdgeInsets.all(16),
@@ -1959,8 +2068,6 @@ class _QcmViewerState extends State<_QcmViewer> {
                   ),
                 ),
                 const SizedBox(height: 16),
-
-                // Options
                 ...q.options.asMap().entries.map((e) {
                   final i = e.key;
                   final opt = e.value;
@@ -2011,7 +2118,6 @@ class _QcmViewerState extends State<_QcmViewer> {
                       ),
                       child: Row(
                         children: [
-                          // Option letter circle
                           Container(
                             width: 28,
                             height: 28,
@@ -2033,7 +2139,7 @@ class _QcmViewerState extends State<_QcmViewer> {
                             ),
                             child: Center(
                               child: Text(
-                                String.fromCharCode(65 + i), // A B C D
+                                String.fromCharCode(65 + i),
                                 style: TextStyle(
                                   color: isAnswered && isCorrect
                                       ? const Color(0xFF10B981)
@@ -2063,8 +2169,6 @@ class _QcmViewerState extends State<_QcmViewer> {
                     ),
                   );
                 }),
-
-                // Explanation (shown after answering)
                 if (isAnswered) ...[
                   const SizedBox(height: 4),
                   Container(
@@ -2102,8 +2206,6 @@ class _QcmViewerState extends State<_QcmViewer> {
             ),
           ),
         ),
-
-        // ── Navigation ──
         Padding(
           padding: const EdgeInsets.fromLTRB(20, 0, 20, 32),
           child: Row(
@@ -2127,7 +2229,6 @@ class _QcmViewerState extends State<_QcmViewer> {
                       ? Icons.flag_rounded
                       : Icons.arrow_forward_ios_rounded,
                   iconTrailing: true,
-                  // Must answer before proceeding
                   enabled: isAnswered,
                   colors: c,
                   onTap: _next,
@@ -2140,7 +2241,6 @@ class _QcmViewerState extends State<_QcmViewer> {
     );
   }
 
-  // ── Score screen ────────────────────────────────────────────────────────────
   Widget _buildScore() {
     final pct = _score / _qs.length;
     final color = pct >= 0.7
@@ -2158,7 +2258,6 @@ class _QcmViewerState extends State<_QcmViewer> {
       padding: const EdgeInsets.fromLTRB(20, 32, 20, 32),
       child: Column(
         children: [
-          // Score circle
           Container(
             width: 120,
             height: 120,
@@ -2185,7 +2284,6 @@ class _QcmViewerState extends State<_QcmViewer> {
               ],
             ),
           ),
-
           const SizedBox(height: 16),
           Text(
             message,
@@ -2196,8 +2294,6 @@ class _QcmViewerState extends State<_QcmViewer> {
             ),
           ),
           const SizedBox(height: 28),
-
-          // Per-question review
           ..._qs.asMap().entries.map((e) {
             final i = e.key;
             final q = e.value;
@@ -2264,7 +2360,6 @@ class _QcmViewerState extends State<_QcmViewer> {
               ),
             );
           }),
-
           const SizedBox(height: 16),
           SizedBox(
             width: double.infinity,

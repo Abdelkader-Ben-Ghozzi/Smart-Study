@@ -1,7 +1,5 @@
 import 'package:flutter/material.dart';
 
-/// Centralized color tokens — dark & light variants.
-/// Usage: AppColors.of(context).bg
 class AppColorScheme {
   final Color bg;
   final Color surface;

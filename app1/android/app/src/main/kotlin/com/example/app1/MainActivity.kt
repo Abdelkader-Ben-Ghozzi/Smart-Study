@@ -1,5 +1,3 @@
-// android/app/src/main/kotlin/com/example/app1/MainActivity.kt
-
 package com.example.app1
 
 import android.app.AppOpsManager
@@ -27,6 +25,20 @@ class MainActivity : FlutterActivity() {
             CHANNEL
         ).setMethodCallHandler { call, result ->
             when (call.method) {
+
+                // ── Overlay bubble ────────────────────────────────────────
+                "startOverlay" -> {
+                    val duration = call.argument<Long>("duration_millis") ?: (50 * 60 * 1000L)
+                    val intent = Intent(this, FocusOverlayService::class.java)
+                    intent.putExtra("duration_millis", duration)
+                    startForegroundService(intent)
+                    result.success(null)
+                }
+
+                "stopOverlay" -> {
+                    stopService(Intent(this, FocusOverlayService::class.java))
+                    result.success(null)
+                }
 
                 // ── Overlay permission ────────────────────────────────────
                 "hasOverlayPermission" ->

@@ -1,16 +1,47 @@
 // lib/screens/active_focus_screen.dart
-//
-// Back button / swipe-back works — takes you back to FocusPage.
-// The session keeps running (timer in provider keeps ticking via FocusPage).
-// Full AppColors.of(context) — no hardcoded colors.
 
 import 'dart:async';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import '../providers/focus_provider.dart';
+import '../providers/stats_provider.dart';
 import '../theme/app_colors.dart';
+
+// ── Local notifications singleton ─────────────────────────────────────────────
+final _notifs = FlutterLocalNotificationsPlugin();
+
+Future<void> initFocusNotifications() async {
+  const android = AndroidInitializationSettings('@mipmap/ic_launcher');
+  const settings = InitializationSettings(android: android);
+  await _notifs.initialize(settings: settings);
+}
+
+Future<void> _showSessionCompleteNotification(int streak) async {
+  const details = NotificationDetails(
+    android: AndroidNotificationDetails(
+      'focus_complete',
+      'Focus Sessions',
+      channelDescription: 'Focus session completion alerts',
+      importance: Importance.high,
+      priority: Priority.high,
+      playSound: true,
+      enableVibration: true,
+    ),
+  );
+  await _notifs.show(
+    id: 42,
+    title: 'Focus session complete',
+    body: streak > 0
+        ? '$streak day streak — keep it up'
+        : 'Great work. Start a streak by completing sessions daily.',
+    notificationDetails: details,
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 
 class ActiveFocusScreen extends ConsumerStatefulWidget {
   final List<String> blockedPackages;
@@ -29,14 +60,6 @@ class _ActiveFocusScreenState extends ConsumerState<ActiveFocusScreen>
   Timer? _holdTimer;
   bool _showAbandon = false;
   bool _completing = false;
-
-  static const _motivations = [
-    '🧠 Session started — apps are blocked.',
-    '💪 10 minutes in. Momentum is building.',
-    '⚡ Deep work activated. Stay locked in.',
-    '🎯 Halfway there — you\'ve got this.',
-    '🔥 Almost done. Finish strong!',
-  ];
 
   @override
   void initState() {
@@ -75,30 +98,24 @@ class _ActiveFocusScreenState extends ConsumerState<ActiveFocusScreen>
   Future<void> _handleComplete() async {
     if (_completing) return;
     setState(() => _completing = true);
+
     final streak = await ref
         .read(activeFocusProvider.notifier)
         .completeSession();
-    if (!mounted) return;
-    HapticFeedback.mediumImpact();
-    _showCompletionDialog(streak);
-  }
 
-  void _showCompletionDialog(int streak) {
-    final c = AppColors.of(context);
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (ctx) => _CompletionDialog(
-        streak: streak,
-        colors: c,
-        onHome: () {
-          Navigator.of(ctx).pop();
-          // Pop back to FocusPage (not all the way to HomeScreen)
-          Navigator.of(context).pop();
-          ref.read(activeFocusProvider.notifier).reset();
-        },
-      ),
-    );
+    if (!mounted) return;
+
+    HapticFeedback.mediumImpact();
+
+    await _showSessionCompleteNotification(streak);
+
+    ref.invalidate(focusStatsProvider);
+    ref.invalidate(statsProvider);
+
+    ref.read(activeFocusProvider.notifier).reset();
+
+    if (!mounted) return;
+    Navigator.of(context).popUntil((route) => route.isFirst);
   }
 
   void _startHold() {
@@ -111,8 +128,13 @@ class _ActiveFocusScreenState extends ConsumerState<ActiveFocusScreen>
           .read(activeFocusProvider.notifier)
           .abandonSession();
       if (!mounted) return;
+
+      ref.invalidate(focusStatsProvider);
+      ref.invalidate(statsProvider);
       ref.read(activeFocusProvider.notifier).reset();
-      Navigator.of(context).pop();
+
+      Navigator.of(context).popUntil((route) => route.isFirst);
+
       final c = AppColors.of(context);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -143,12 +165,11 @@ class _ActiveFocusScreenState extends ConsumerState<ActiveFocusScreen>
     return '${m.toString().padLeft(2, '0')}:${s.toString().padLeft(2, '0')}';
   }
 
-  String _motivationFor(int pct) {
-    if (pct < 10) return _motivations[0];
-    if (pct < 30) return _motivations[1];
-    if (pct < 55) return _motivations[2];
-    if (pct < 80) return _motivations[3];
-    return _motivations[4];
+  String _fmtMin(int m) {
+    if (m < 60) return '${m}m';
+    final h = m ~/ 60;
+    final rem = m % 60;
+    return rem == 0 ? '${h}h' : '${h}h ${rem}m';
   }
 
   @override
@@ -157,8 +178,8 @@ class _ActiveFocusScreenState extends ConsumerState<ActiveFocusScreen>
     final session = ref.watch(activeFocusProvider);
     final stats = ref.watch(focusStatsProvider).valueOrNull;
     final pct = session.progressPercent;
+    final streak = stats?.streak ?? 0;
 
-    // Display names: strip package prefix if possible
     final displayNames = widget.blockedPackages.map((pkg) {
       final parts = pkg.split('.');
       return parts.length > 1 ? parts.last : pkg;
@@ -166,7 +187,6 @@ class _ActiveFocusScreenState extends ConsumerState<ActiveFocusScreen>
 
     return Scaffold(
       backgroundColor: c.bg,
-      // Back arrow works — returns to FocusPage, session keeps running
       appBar: AppBar(
         backgroundColor: c.bg,
         foregroundColor: c.text,
@@ -205,13 +225,29 @@ class _ActiveFocusScreenState extends ConsumerState<ActiveFocusScreen>
           ),
         ),
         actions: [
-          Padding(
-            padding: const EdgeInsets.only(right: 16),
-            child: Text(
-              'Streak: ${stats?.streak ?? 0} 🔥',
-              style: TextStyle(fontSize: 13, color: c.subtitle),
+          if (streak > 0)
+            Padding(
+              padding: const EdgeInsets.only(right: 16),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    Icons.local_fire_department_rounded,
+                    size: 16,
+                    color: const Color(0xFFF59E0B),
+                  ),
+                  const SizedBox(width: 4),
+                  Text(
+                    '$streak day streak',
+                    style: const TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: Color(0xFFF59E0B),
+                    ),
+                  ),
+                ],
+              ),
             ),
-          ),
         ],
       ),
       body: SafeArea(
@@ -223,7 +259,6 @@ class _ActiveFocusScreenState extends ConsumerState<ActiveFocusScreen>
                 children: [
                   const SizedBox(height: 16),
 
-                  // ── Ring timer ─────────────────────────────────────────
                   _RingTimer(
                     progress: session.progress,
                     label: _fmt(session.remainingSeconds),
@@ -232,32 +267,6 @@ class _ActiveFocusScreenState extends ConsumerState<ActiveFocusScreen>
 
                   const SizedBox(height: 24),
 
-                  // ── Motivation ─────────────────────────────────────────
-                  AnimatedSwitcher(
-                    duration: const Duration(milliseconds: 400),
-                    child: Container(
-                      key: ValueKey(_motivationFor(pct)),
-                      width: double.infinity,
-                      padding: const EdgeInsets.all(14),
-                      decoration: BoxDecoration(
-                        color: c.success.withOpacity(0.06),
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: c.success.withOpacity(0.2)),
-                      ),
-                      child: Text(
-                        _motivationFor(pct),
-                        style: TextStyle(
-                          fontSize: 13,
-                          color: c.success,
-                          height: 1.5,
-                        ),
-                      ),
-                    ),
-                  ),
-
-                  const SizedBox(height: 20),
-
-                  // ── Blocked apps ───────────────────────────────────────
                   if (displayNames.isNotEmpty) ...[
                     Row(
                       children: [
@@ -313,11 +322,10 @@ class _ActiveFocusScreenState extends ConsumerState<ActiveFocusScreen>
                     const SizedBox(height: 20),
                   ],
 
-                  // ── Mini stats ─────────────────────────────────────────
                   Row(
                     children: [
                       _MiniStat(
-                        value: '${stats?.streak ?? 0}',
+                        value: '$streak',
                         label: 'Streak',
                         valueColor: c.success,
                       ),
@@ -329,7 +337,8 @@ class _ActiveFocusScreenState extends ConsumerState<ActiveFocusScreen>
                       ),
                       const SizedBox(width: 10),
                       _MiniStat(
-                        value: '${(stats?.completionRate ?? 0 * 100).round()}%',
+                        value:
+                            '${((stats?.completionRate ?? 0) * 100).round()}%',
                         label: 'Rate',
                         valueColor: const Color(0xFFF59E0B),
                       ),
@@ -338,7 +347,6 @@ class _ActiveFocusScreenState extends ConsumerState<ActiveFocusScreen>
 
                   const SizedBox(height: 20),
 
-                  // ── Info note ──────────────────────────────────────────
                   Container(
                     padding: const EdgeInsets.all(14),
                     decoration: BoxDecoration(
@@ -359,7 +367,7 @@ class _ActiveFocusScreenState extends ConsumerState<ActiveFocusScreen>
                         ),
                         const SizedBox(height: 4),
                         Text(
-                          'Session ends automatically when timer hits zero ✓',
+                          'Session ends automatically when timer hits zero.',
                           textAlign: TextAlign.center,
                           style: TextStyle(
                             fontSize: 12,
@@ -374,7 +382,6 @@ class _ActiveFocusScreenState extends ConsumerState<ActiveFocusScreen>
               ),
             ),
 
-            // ── Abandon button ───────────────────────────────────────────
             Positioned(
               left: 20,
               right: 20,
@@ -397,7 +404,6 @@ class _ActiveFocusScreenState extends ConsumerState<ActiveFocusScreen>
               ),
             ),
 
-            // ── Hold-to-abandon sheet ────────────────────────────────────
             if (_showAbandon)
               _AbandonSheet(
                 holdCtrl: _holdCtrl,
@@ -412,13 +418,6 @@ class _ActiveFocusScreenState extends ConsumerState<ActiveFocusScreen>
         ),
       ),
     );
-  }
-
-  String _fmtMin(int m) {
-    if (m < 60) return '${m}m';
-    final h = m ~/ 60;
-    final rem = m % 60;
-    return rem == 0 ? '${h}h' : '${h}h ${rem}m';
   }
 }
 
@@ -617,7 +616,7 @@ class _AbandonSheet extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              '⚠ This will break your streak',
+              'This will break your streak',
               style: TextStyle(
                 fontSize: 15,
                 fontWeight: FontWeight.w600,
@@ -692,87 +691,6 @@ class _AbandonSheet extends StatelessWidget {
                   ),
                 ),
               ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// COMPLETION DIALOG
-// ─────────────────────────────────────────────────────────────────────────────
-class _CompletionDialog extends StatelessWidget {
-  final int streak;
-  final AppColorScheme colors;
-  final VoidCallback onHome;
-
-  const _CompletionDialog({
-    required this.streak,
-    required this.colors,
-    required this.onHome,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final c = colors;
-    return Dialog(
-      backgroundColor: c.surface,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(20),
-        side: BorderSide(color: c.borderDefault),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(28),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              width: 80,
-              height: 80,
-              decoration: BoxDecoration(
-                color: c.success.withOpacity(0.12),
-                shape: BoxShape.circle,
-                border: Border.all(color: c.success.withOpacity(0.4)),
-              ),
-              child: const Center(
-                child: Text('🎉', style: TextStyle(fontSize: 36)),
-              ),
-            ),
-            const SizedBox(height: 20),
-            Text(
-              'Session complete!',
-              style: TextStyle(
-                fontSize: 22,
-                fontWeight: FontWeight.w600,
-                color: c.text,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              '🔥 Streak: $streak days — kept!',
-              style: TextStyle(fontSize: 14, color: c.success),
-            ),
-            const SizedBox(height: 24),
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton(
-                onPressed: onHome,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: c.primary,
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                  elevation: 0,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                ),
-                child: const Text(
-                  'Back to Focus',
-                  style: TextStyle(fontSize: 15, fontWeight: FontWeight.w500),
-                ),
-              ),
             ),
           ],
         ),

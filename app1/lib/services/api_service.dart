@@ -11,7 +11,6 @@ class ApiService {
 
   // ── Headers ───────────────────────────────────────────────────────────────
 
-  // Added ngrok-skip-browser-warning to prevent the 404/502 landing page issues
   Map<String, String> get _baseHeaders => {
     'Accept': 'application/json',
     'Content-Type': 'application/json',

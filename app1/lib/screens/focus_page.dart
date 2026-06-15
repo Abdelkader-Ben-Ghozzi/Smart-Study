@@ -7,8 +7,6 @@ import '../providers/focus_provider.dart';
 import '../theme/app_colors.dart';
 import '../models/focus_session.dart';
 import 'focus_settings_screen.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-import '../services/focus_service.dart';
 
 class FocusPage extends ConsumerStatefulWidget {
   const FocusPage({super.key});
@@ -22,6 +20,8 @@ class _FocusPageState extends ConsumerState<FocusPage>
   Timer? _ticker;
   late AnimationController _pulseCtrl;
   bool _showStopOverlay = false;
+
+  static const _platform = MethodChannel('com.example.app1/focus');
 
   @override
   void initState() {
@@ -59,7 +59,13 @@ class _FocusPageState extends ConsumerState<FocusPage>
         .completeSession();
     if (!mounted) return;
     HapticFeedback.mediumImpact();
-    final c = AppColors.of(context);
+
+    // Stop overlay bubble
+    try {
+      await _platform.invokeMethod('stopOverlay');
+    } catch (_) {}
+
+    if (!mounted) return;
     showDialog(
       context: context,
       barrierDismissible: false,
@@ -81,7 +87,6 @@ class _FocusPageState extends ConsumerState<FocusPage>
       return;
     }
 
-    // Check if any apps are blocked
     final settings = ref.read(focusSettingsProvider).valueOrNull;
     if (settings == null || settings.blockedApps.isEmpty) {
       final c = AppColors.of(context);
@@ -134,7 +139,6 @@ class _FocusPageState extends ConsumerState<FocusPage>
       return;
     }
 
-    // Start session with saved settings
     final started = await ref
         .read(activeFocusProvider.notifier)
         .startSession(settings.durationMinutes, settings.blockedApps);
@@ -144,6 +148,14 @@ class _FocusPageState extends ConsumerState<FocusPage>
       _ticker?.cancel();
       _startTicker();
       HapticFeedback.mediumImpact();
+
+      // Start overlay bubble
+      try {
+        final durationMillis = settings.durationMinutes * 60 * 1000;
+        await _platform.invokeMethod('startOverlay', {
+          'duration_millis': durationMillis,
+        });
+      } catch (_) {}
     } else {
       final c = AppColors.of(context);
       ScaffoldMessenger.of(context).showSnackBar(
@@ -204,7 +216,6 @@ class _FocusPageState extends ConsumerState<FocusPage>
                   padding: const EdgeInsets.fromLTRB(16, 0, 16, 32),
                   sliver: SliverList(
                     delegate: SliverChildListDelegate([
-                      // ── Main focus card ──────────────────────────────────
                       _FocusCard(
                         isActive: isActive,
                         session: session,
@@ -213,17 +224,12 @@ class _FocusPageState extends ConsumerState<FocusPage>
                         onSwitchTapped: _onSwitchTapped,
                       ),
                       const SizedBox(height: 16),
-
-                      // ── Stats section ────────────────────────────────────
                       statsAsync.when(
                         loading: () => const _StatsLoading(),
                         error: (_, __) => const SizedBox.shrink(),
                         data: (stats) => _StatsSection(stats: stats),
                       ),
-
                       const SizedBox(height: 16),
-
-                      // ── Settings summary ─────────────────────────────────
                       _SettingsSummaryCard(
                         settings: settings,
                         onEdit: () => Navigator.of(context).push(
@@ -239,12 +245,17 @@ class _FocusPageState extends ConsumerState<FocusPage>
               ],
             ),
 
-            // ── Hold-to-stop overlay ─────────────────────────────────────
             if (_showStopOverlay)
               _HoldToStopOverlay(
                 onStopped: () async {
                   setState(() => _showStopOverlay = false);
                   _ticker?.cancel();
+
+                  // Stop overlay bubble
+                  try {
+                    await _platform.invokeMethod('stopOverlay');
+                  } catch (_) {}
+
                   final streak = await ref
                       .read(activeFocusProvider.notifier)
                       .abandonSession();
@@ -277,9 +288,7 @@ class _FocusPageState extends ConsumerState<FocusPage>
   }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// MAIN FOCUS CARD
-// ─────────────────────────────────────────────────────────────────────────────
+// ── Focus card ───────────────────────────────────────────────────────────────
 class _FocusCard extends StatelessWidget {
   final bool isActive;
   final ActiveFocusState session;
@@ -322,7 +331,6 @@ class _FocusCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Header row
           Row(
             children: [
               FadeTransition(
@@ -349,7 +357,6 @@ class _FocusCard extends StatelessWidget {
                   ),
                 ),
               ),
-              // Custom toggle switch
               GestureDetector(
                 onTap: onSwitchTapped,
                 child: AnimatedContainer(
@@ -379,11 +386,8 @@ class _FocusCard extends StatelessWidget {
               ),
             ],
           ),
-
           if (isActive) ...[
             const SizedBox(height: 20),
-
-            // Big timer
             Center(
               child: Text(
                 _fmt(session.remainingSeconds),
@@ -404,8 +408,6 @@ class _FocusCard extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 14),
-
-            // Progress bar
             ClipRRect(
               borderRadius: BorderRadius.circular(4),
               child: LinearProgressIndicator(
@@ -416,8 +418,6 @@ class _FocusCard extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 16),
-
-            // Blocked apps chips
             if (session.blockedPackages.isNotEmpty) ...[
               Text(
                 'BLOCKING',
@@ -429,7 +429,6 @@ class _FocusCard extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 8),
-
               Wrap(
                 spacing: 6,
                 runSpacing: 6,
@@ -485,9 +484,7 @@ class _FocusCard extends StatelessWidget {
   }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// STATS SECTION
-// ─────────────────────────────────────────────────────────────────────────────
+// ── Stats section ─────────────────────────────────────────────────────────────
 class _StatsSection extends StatelessWidget {
   final FocusStats stats;
   const _StatsSection({required this.stats});
@@ -503,7 +500,6 @@ class _StatsSection extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final c = AppColors.of(context);
-
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -519,8 +515,6 @@ class _StatsSection extends StatelessWidget {
             ),
           ),
         ),
-
-        // Row 1 — Today + Week
         Row(
           children: [
             Expanded(
@@ -543,8 +537,6 @@ class _StatsSection extends StatelessWidget {
           ],
         ),
         const SizedBox(height: 10),
-
-        // Row 2 — Rate + Sessions + Streak
         Row(
           children: [
             Expanded(
@@ -583,7 +575,6 @@ class _BigStatCard extends StatelessWidget {
   final String label;
   final IconData icon;
   final Color color;
-
   const _BigStatCard({
     required this.value,
     required this.label,
@@ -637,7 +628,6 @@ class _MetricPill extends StatelessWidget {
   final String label;
   final bool showBar;
   final double rate;
-
   const _MetricPill({
     required this.value,
     required this.label,
@@ -701,13 +691,9 @@ class _StatsLoading extends StatelessWidget {
   }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// SETTINGS SUMMARY CARD
-// ─────────────────────────────────────────────────────────────────────────────
 class _SettingsSummaryCard extends StatelessWidget {
   final FocusSettings? settings;
   final VoidCallback onEdit;
-
   const _SettingsSummaryCard({this.settings, required this.onEdit});
 
   @override
@@ -715,7 +701,6 @@ class _SettingsSummaryCard extends StatelessWidget {
     final c = AppColors.of(context);
     final dur = settings?.durationMinutes ?? 50;
     final blocked = settings?.blockedApps.length ?? 0;
-
     return GestureDetector(
       onTap: onEdit,
       child: Container(
@@ -743,13 +728,10 @@ class _SettingsSummaryCard extends StatelessWidget {
   }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// HOLD-TO-STOP OVERLAY
-// ─────────────────────────────────────────────────────────────────────────────
+// ── Hold-to-stop overlay ──────────────────────────────────────────────────────
 class _HoldToStopOverlay extends StatefulWidget {
   final VoidCallback onStopped;
   final VoidCallback onDismissed;
-
   const _HoldToStopOverlay({
     required this.onStopped,
     required this.onDismissed,
@@ -797,7 +779,6 @@ class _HoldToStopOverlayState extends State<_HoldToStopOverlay>
   @override
   Widget build(BuildContext context) {
     final c = AppColors.of(context);
-
     return Positioned.fill(
       child: GestureDetector(
         onTap: widget.onDismissed,
@@ -805,7 +786,7 @@ class _HoldToStopOverlayState extends State<_HoldToStopOverlay>
           color: Colors.black.withOpacity(0.6),
           alignment: Alignment.center,
           child: GestureDetector(
-            onTap: () {}, // prevent dismiss when tapping dialog
+            onTap: () {},
             child: Container(
               margin: const EdgeInsets.symmetric(horizontal: 24),
               padding: const EdgeInsets.all(28),
@@ -817,7 +798,6 @@ class _HoldToStopOverlayState extends State<_HoldToStopOverlay>
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  // Circular progress ring
                   SizedBox(
                     width: 80,
                     height: 80,
@@ -857,7 +837,6 @@ class _HoldToStopOverlayState extends State<_HoldToStopOverlay>
                     ),
                   ),
                   const SizedBox(height: 24),
-                  // Hold button
                   GestureDetector(
                     onLongPressStart: (_) => _startHold(),
                     onLongPressEnd: (_) => _cancelHold(),
@@ -870,9 +849,9 @@ class _HoldToStopOverlayState extends State<_HoldToStopOverlay>
                         borderRadius: BorderRadius.circular(14),
                       ),
                       alignment: Alignment.center,
-                      child: Text(
+                      child: const Text(
                         'Hold to stop',
-                        style: const TextStyle(
+                        style: TextStyle(
                           color: Colors.white,
                           fontSize: 15,
                           fontWeight: FontWeight.w600,
@@ -906,19 +885,15 @@ class _HoldToStopOverlayState extends State<_HoldToStopOverlay>
   }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// COMPLETION DIALOG
-// ─────────────────────────────────────────────────────────────────────────────
+// ── Completion dialog ─────────────────────────────────────────────────────────
 class _CompletionDialog extends StatelessWidget {
   final int streak;
   final VoidCallback onHome;
-
   const _CompletionDialog({required this.streak, required this.onHome});
 
   @override
   Widget build(BuildContext context) {
     final c = AppColors.of(context);
-
     return Dialog(
       backgroundColor: c.surface,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
