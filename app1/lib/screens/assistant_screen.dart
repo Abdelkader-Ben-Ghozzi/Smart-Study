@@ -150,7 +150,7 @@ class _AssistantScreenState extends State<AssistantScreen>
           .toList();
 
       final String apiKey =
-          'AQ.Ab8RN6K982AHYE1uFfEnDWbBH9_NaltATeG5ruQKc5oMJiX8uw';
+          '';
       final url = Uri.parse(
         'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=$apiKey',
       );
